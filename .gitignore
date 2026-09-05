@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Environment / secrets
+.env
+.env.*
+
+# Logs
+*.log
+
+# ===== backend (Rust) =====
+backend/target/
+
+# 运行时数据与导出产物（如需提交种子数据可自行调整）
+backend/data/
+sample-exports/
+
+# ===== frontend (Vite + TS) =====
+node_modules/
+frontend/dist/
+frontend/*.local
+

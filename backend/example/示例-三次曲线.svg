@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200">
+  <title>三次曲线 f(x)=x³−3x</title>
+  <style>
+    .axis  { stroke: #888; stroke-width: 1.2; }
+    .tick  { stroke: #888; stroke-width: 1.2; }
+    .curve { stroke: #2563eb; stroke-width: 2; fill: none; }
+    .guide { stroke: #999; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+    .dot   { fill: #2563eb; }
+    .lbl   { font: 13px Georgia, serif; fill: #444; }
+    .num   { font: 11px Georgia, serif; fill: #444; }
+    .fn    { font: italic 13px Georgia, serif; fill: #444; }
+  </style>
+  <!-- 坐标轴 -->
+  <line class="axis" x1="18" y1="100" x2="305" y2="100"/>
+  <line class="axis" x1="160" y1="10" x2="160" y2="188"/>
+  <polygon points="305,100 297,96 297,104" fill="#888"/>
+  <polygon points="160,10 156,18 164,18" fill="#888"/>
+  <text class="lbl" x="294" y="119">x</text>
+  <text class="lbl" x="168" y="22">y</text>
+  <text class="lbl" x="152" y="117" text-anchor="end">O</text>
+  <!-- 刻度 x=±2 -->
+  <line class="tick" x1="38" y1="97" x2="38" y2="103"/>
+  <line class="tick" x1="282" y1="97" x2="282" y2="103"/>
+  <!-- 极值点导引线：(-1,2) 与 (1,-2) -->
+  <path class="guide" d="M160 60H99 M99 100V60"/>
+  <path class="guide" d="M160 140H221 M221 100V140"/>
+  <circle class="dot" cx="99" cy="60" r="2.6"/>
+  <circle class="dot" cx="221" cy="140" r="2.6"/>
+  <!-- 坐标标注 -->
+  <text class="num" x="38" y="117" text-anchor="middle">−2</text>
+  <text class="num" x="99" y="117" text-anchor="middle">−1</text>
+  <text class="num" x="216" y="117" text-anchor="end">1</text>
+  <text class="num" x="282" y="117" text-anchor="middle">2</text>
+  <text class="num" x="153" y="56" text-anchor="end">2</text>
+  <text class="num" x="153" y="152" text-anchor="end">−2</text>
+  <!-- 曲线 f(x)=x³−3x（Hermite 拟合的贝塞尔路径） -->
+  <path class="curve" d="M 25.8 181
+    C 29.9 165.6, 33.9 152, 38 140
+    C 42.1 128, 46.1 117.6, 50.2 108.6
+    C 54.3 99.7, 58.3 92.2, 62.4 85.9
+    C 66.5 79.7, 70.5 74.7, 74.6 70.9
+    C 78.7 67, 82.7 64.3, 86.8 62.6
+    C 90.9 60.8, 94.9 60, 99 60
+    C 103.1 60, 107.1 60.8, 111.2 62.2
+    C 115.3 63.7, 119.3 65.8, 123.4 68.3
+    C 127.5 70.9, 131.5 73.9, 135.6 77.3
+    C 139.7 80.6, 143.7 84.3, 147.8 88.2
+    C 151.9 92, 155.9 96, 160 100
+    C 164.1 104, 168.1 108, 172.2 111.8
+    C 176.3 115.7, 180.3 119.4, 184.4 122.7
+    C 188.5 126.1, 192.5 129.1, 196.6 131.7
+    C 200.7 134.2, 204.7 136.3, 208.8 137.8
+    C 212.9 139.2, 216.9 140, 221 140
+    C 225.1 140, 229.1 139.2, 233.2 137.4
+    C 237.3 135.7, 241.3 133, 245.4 129.1
+    C 249.5 125.3, 253.5 120.3, 257.6 114.1
+    C 261.7 107.8, 265.7 100.3, 269.8 91.4
+    C 273.9 82.4, 277.9 72, 282 60
+    C 286.1 48, 290.1 34.4, 294.2 19"/>
+  <text class="fn" x="24" y="32">f(x)=x³−3x</text>
+</svg>

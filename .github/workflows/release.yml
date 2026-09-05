@@ -1,0 +1,143 @@
+# Release pipeline: builds the desktop/server bundles and the Docker image
+# whenever a GitHub release is published (or manually via workflow_dispatch).
+#
+# - Windows x64 (zip), Linux x64 (tar.gz), macOS Apple Silicon (tar.gz)
+# - Docker image pushed to GHCR (linux/amd64)
+#
+# Each archive contains the backend binary plus the built frontend (the
+# backend serves it) and a short release note about the environment variables.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write # upload archives to the release
+  packages: write # push the Docker image to GHCR
+
+env:
+  FRONTEND_DIR: frontend
+  BACKEND_DIR: backend
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: windows-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            ext: .exe
+            archive: zip
+          - label: linux-x64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            ext: ""
+            archive: tar.gz
+          - label: macos-arm64
+            os: macos-14
+            target: aarch64-apple-darwin
+            ext: ""
+            archive: tar.gz
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
+          key: ${{ matrix.target }}
+
+      - name: Build frontend
+        run: npm ci && npm run build
+        working-directory: ${{ env.FRONTEND_DIR }}
+
+      - name: Build backend
+        run: cargo build --release --locked --target ${{ matrix.target }}
+        working-directory: ${{ env.BACKEND_DIR }}
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $stage = "drill-${{ matrix.label }}"
+          New-Item -ItemType Directory -Path "$stage/frontend/dist" -Force | Out-Null
+          Copy-Item "backend/target/${{ matrix.target }}/release/drill-backend.exe" "$stage/"
+          Copy-Item -Recurse "frontend/dist/*" "$stage/frontend/dist/"
+          Copy-Item "RELEASE.md" "$stage/" -ErrorAction SilentlyContinue
+          Compress-Archive -Path "$stage/*" -DestinationPath "drill-${{ matrix.label }}.zip"
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        run: |
+          stage="drill-${{ matrix.label }}"
+          mkdir -p "$stage/frontend/dist"
+          cp "backend/target/${{ matrix.target }}/release/drill-backend" "$stage/"
+          cp -r frontend/dist/. "$stage/frontend/dist/"
+          cp RELEASE.md "$stage/" 2>/dev/null || true
+          tar -czf "drill-${{ matrix.label }}.tar.gz" "$stage"
+
+      - name: Upload archive to the release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name == 'release'
+        with:
+          files: |
+            drill-${{ matrix.label }}.${{ matrix.archive }}
+      - uses: actions/upload-artifact@v5
+        if: github.event_name != 'release'
+        with:
+          name: drill-${{ matrix.label }}
+          path: drill-${{ matrix.label }}.${{ matrix.archive }}
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'release'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ github.event_name == 'release' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'release' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,23 @@
+[package]
+name = "drill-backend"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+anyhow = "1"
+typst = "0.15"
+typst-as-lib = "0.16"
+typst-pdf = "0.15"
+typst-layout = "0.15"
+typst-assets = { version = "0.15", features = ["fonts"] }
+mitex = "0.2"
+boa_engine = "0.22.0"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+

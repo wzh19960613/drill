@@ -1,0 +1,721 @@
+:root {
+  color-scheme: light;
+  --panel: #f2f3f5;
+  --hover: #eceef2;
+  --bg: #f4f5f7;
+  --card: #ffffff;
+  --ink: #1f2329;
+  --muted: #86909c;
+  --line: #e5e6eb;
+  --brand: #2f6fed;
+  --brand-weak: #eef3fe;
+  --good: #2e9e5b;
+  --good-weak: #e9f7ef;
+  --bad: #d83931;
+  --bad-weak: #fdeeec;
+  --warn: #b88230;
+  --warn-weak: #fdf3e3;
+  --radius-pill: 62.4375rem;
+  --radius-dlg: 0.875rem;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.18);
+  --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.24);
+  --shadow-float: 0 22px 56px rgba(0, 0, 0, 0.34), 0 4px 14px rgba(0, 0, 0, 0.18);
+  --shadow-inset: 0 1px 4px rgba(0, 0, 0, 0.08);
+  /* stacking layers, low to high: list sticky (1-2) < bar < floating bar <
+     modal family < menu < toast */
+  --z-bar: 10;
+  --z-float: 20;
+  --z-page: 40;
+  --z-modal: 300;
+  --z-modal-lift: 320;
+  --z-detail: 400;
+  --z-nested: 420;
+  --z-menu: 450;
+  --z-toast: 500;
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141519;
+  --card: #1f2127;
+  --panel: #262932;
+  --hover: #2a2d37;
+  --ink: #e6e8ec;
+  --muted: #9aa1ac;
+  --line: #363a44;
+  --brand: #7aa5f8;
+  --brand-weak: #232f4a;
+  --good: #58c488;
+  --good-weak: #1d3328;
+  --bad: #e5716a;
+  --bad-weak: #3b2523;
+  --warn: #d9a353;
+  --warn-weak: #332a17;
+}
+
+html[data-theme='dark'] .q-svg {
+  filter: invert(1);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* touch-action: none keeps touch drags on the mask off the root scroller */
+.modal-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-modal);
+  padding: 1.25rem;
+  touch-action: none;
+}
+
+/* Common dialog shell: card surface, column layout, modal shadow. Size and
+   max-height stay per-dialog; .fs switches to fullscreen below the 999px
+   container breakpoint */
+.dialog {
+  background: var(--card);
+  border-radius: var(--radius-dlg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-modal);
+}
+
+.dialog.pop {
+  box-shadow: var(--shadow-pop);
+}
+
+@container (max-width: 62.4375rem) {
+  .modal-mask.fs {
+    padding: 0;
+  }
+
+  /* double class + ancestor beats per-component scoped overrides such as
+     `.qmodal[data-v] { max-height: 86vh }` (same specificity, injected later).
+     Stretches inside the (inset-pinned) mask instead of a viewport unit —
+     height units under-resolve in WebKit standalone */
+  .modal-mask.fs .dialog.fs {
+    align-self: stretch;
+    width: 100%;
+    flex: none;
+    max-height: none;
+    border-radius: 0;
+  }
+}
+
+.mini-modal {
+  background: var(--card);
+  border-radius: var(--radius-dlg);
+  max-width: 100%;
+  padding: 1.25rem 1.375rem;
+  box-shadow: var(--shadow-pop);
+}
+
+.mini-modal h3 {
+  margin: 0 0 0.625rem;
+  font-size: 0.9375rem;
+}
+
+.mini-modal p {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.8;
+}
+
+.mini-modal .m-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+/* The traffic lights are a fixed physical screen region: the avoidance is px
+   so it does not scale with the app font size */
+html.pwa-pad .s-exit {
+  position: relative;
+  left: 60px;
+}
+
+html.pwa-pad .s-mid {
+  padding-left: 60px;
+}
+
+/* media query, not container query: the html container cannot select itself */
+@media (min-width: 500px) {
+  html.pwa-pad .dlg-head {
+    padding-left: 76px;
+  }
+}
+
+html {
+  /* App font-size base (the setting adjusts this line); the print page has
+     its own physical sizes */
+  font-size: 16px;
+  /* Breakpoint container: the rem of container queries follows the app font
+     size above (media queries do not). A size container is queryable on both
+     axes (width + height). The whole viewport chain (html/body/#app/.app) is
+     pinned geometrically via absolute inset: every height unit misresolves
+     somewhere in WebKit standalone (100% chain → under-fill; 100dvh →
+     excludes the bottom safe area, measured 1160 on a 1194pt viewport;
+     -webkit-fill-available → no effect there), while inset anchors to the
+     initial containing block, which is the full covered viewport */
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  /* No-fixed scrolling model: html does not scroll, body is a mask stage the
+     size of the viewport, .app is the only scroll container (see App.vue) */
+  overflow: hidden;
+}
+
+body {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* No horizontal scrolling site-wide; exceptions: the narrow-screen question
+   list (.ql) and the print preview. Root uses hidden not clip — Safari
+   ignores clip on the root */
+html {
+  overflow-x: hidden;
+}
+
+html body {
+  overflow-x: clip;
+}
+
+html.print-preview,
+html.print-preview body {
+  overflow-x: auto;
+}
+
+/* paint the canvas too: on iOS an under-filled height chain would otherwise
+   show a white strip below body's background */
+html {
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 0.9375rem/1.75 -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Segoe UI', sans-serif;
+}
+
+/* iPadOS 26 Liquid Glass only blurs scrollable main frames: locking the
+   document defeats it. clip not hidden — clip captures no sticky, and iOS 26
+   regressed on hidden. The app scroller must match the viewport exactly:
+   any min-height floor would push the scrollport bottom (and the sticky
+   bottom bar's anchor) out of view on short windows — squatting is already
+   prevented by flex-shrink: 0 and the content's natural height */
+#app {
+  position: absolute;
+  inset: 0;
+}
+
+.app {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: clip;
+  display: flex;
+  flex-direction: column;
+}
+
+/* fixed-height flex container: shrinking children (the bottom bar) would collapse them */
+.app > * {
+  flex-shrink: 0;
+}
+
+.app > main.fullscreen {
+  flex: 1 1 0;
+  flex-shrink: 1;
+}
+
+/* Bottom-bar geometry shared with the pages' action bars:
+   --bnav-h = one action-bar row, --bnav-mx = side margin,
+   --bnav-gap = floating bottom margin; --bnav-h + --bnav-gap is the bar's
+   viewport-bottom footprint used by avoidance calculations */
+:root {
+  --bnav-h: 4.375rem;
+  --bnav-mx: 1.8rem;
+  --bnav-gap: max(var(--bnav-mx), env(safe-area-inset-bottom));
+}
+
+main {
+  flex: 1;
+  padding: calc(2.25rem + env(safe-area-inset-top)) 1.5rem calc(0.75rem + var(--bnav-gap));
+  width: 100%;
+  max-width: 77.5rem;
+  margin: 0 auto;
+}
+
+main.fullscreen {
+  padding: 0;
+  max-width: none;
+  /* sized by flex (fills .app minus the bottom bar), never a height chain */
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The study view needs a locked-height main (it scrolls internally), but the
+   splash page must let main size to its content so the app scroller can carry
+   both the content and the sticky bottom bar when the window is too short */
+main.fullscreen:has(> .splash) {
+  min-height: auto;
+}
+
+@container (max-width: 40rem) {
+  main:not(.fullscreen) {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius:0.75rem;
+  padding: 1.125rem 1.25rem;
+}
+
+h3 {
+  margin: 0 0 0.625rem;
+  font-size: 0.9375rem;
+}
+
+.btn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius:0.625rem;
+  padding: 0.5625rem 1.25rem;
+  font-size: 0.9375rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn.primary:hover {
+  opacity: 0.9;
+}
+
+.btn.good {
+  background: var(--good);
+  border-color: var(--good);
+  color: #fff;
+}
+
+.btn.good:hover {
+  opacity: 0.9;
+  color: #fff;
+}
+
+.btn.bad {
+  background: var(--bad);
+  border-color: var(--bad);
+  color: #fff;
+}
+
+.btn.bad:hover {
+  opacity: 0.9;
+  color: #fff;
+}
+
+.btn.ghost {
+  background: transparent;
+}
+
+.btn.danger:hover {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.btn.sm {
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  min-height: 2.75rem;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid var(--line);
+  border-radius:0.625rem;
+  background: var(--card);
+  padding: 0.8125rem 1rem;
+  font-size: 0.9375rem;
+  min-height: 3rem;
+  cursor: pointer;
+  text-align: left;
+  color: var(--ink);
+  font-family: inherit;
+  width: 100%;
+}
+
+.toggle-row:hover {
+  border-color: var(--brand);
+}
+
+.toggle-row input {
+  accent-color: var(--brand);
+  width: 1.25rem;
+  height: 1.25rem;
+  flex: none;
+}
+
+.btn.block {
+  display: block;
+  width: 100%;
+}
+
+/* glued pair: hover changes only the text color, or the joint seam breaks */
+.btn-pair {
+  display: flex;
+}
+
+.btn-pair .btn {
+  border-radius: 0;
+}
+
+.btn-pair .btn:hover {
+  border-color: var(--line);
+  background: transparent;
+  color: var(--brand);
+}
+
+.btn-pair .btn:first-child {
+  border-radius: var(--radius-pill) 0 0 var(--radius-pill);
+}
+
+.btn-pair .btn + .btn {
+  margin-left: -1px;
+  border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+}
+
+.chip-btn {
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--ink);
+  border-radius: var(--radius-pill);
+  padding: 0.625rem 1.125rem;
+  font-size: 0.875rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.chip-btn.on {
+  border-color: var(--brand);
+  color: var(--brand);
+  background: var(--brand-weak);
+  font-weight: 600;
+}
+
+.seg {
+  display: flex;
+  gap: 0.375rem;
+  background: var(--panel);
+  border-radius: 0.625rem;
+  padding: 4px;
+}
+
+.seg button {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  border: none;
+  background: transparent;
+  padding: 0.625rem 0;
+  min-height: 2.75rem;
+  border-radius: 0.5rem;
+  font-size: 0.9062rem;
+  cursor: pointer;
+  color: var(--muted);
+  font-family: inherit;
+}
+
+.seg button.on {
+  background: var(--card);
+  color: var(--brand);
+  font-weight: 600;
+  box-shadow: var(--shadow-inset);
+}
+
+/* compact variant: auto-width buttons for toolbar-sized segmented controls */
+.seg.sm {
+  gap: 4px;
+  padding: 3px;
+}
+
+.seg.sm button {
+  flex: none;
+  padding: 0.375rem 0.875rem;
+  min-height: 0;
+  font-size: 0.8125rem;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+/* grow to fill the remaining row width (fields, selects, segmented controls) */
+.fill {
+  flex: 1;
+  min-width: 0;
+}
+
+.field .lbl {
+  flex: none;
+  width: 4.875rem;
+  font-size: 0.8438rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* Frosted-surface recipe: --glass-bg for consumers that only need the tint
+   (pinned covering strips), .glass for full floating surfaces */
+:root {
+  --glass-bg: color-mix(in srgb, var(--card) 60%, transparent);
+}
+
+.glass {
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(0.4375rem);
+  backdrop-filter: blur(0.4375rem);
+  box-shadow: var(--shadow-float);
+}
+
+.btn svg,
+.chip-btn svg,
+.act svg,
+.s-menu button svg,
+.src-row .icon-btn svg {
+  position: relative;
+  top: 0.0625rem;
+}
+
+/* collapsible chevron: rotates -90° when its section is closed */
+.chev {
+  transition: transform 0.2s ease;
+}
+
+.chev.closed {
+  transform: rotate(-90deg);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.375rem;
+  padding: 0 0.375rem;
+  margin:0 2px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius:0.375rem;
+  background: var(--card);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+}
+
+/* icon/text alignment: trim the text line-box slack so flex-centered icons
+   align with the glyphs; adapts to font and size without magic px */
+button {
+  line-height: 1;
+  text-box: trim cap alphabetic;
+}
+
+/* no text selection on controls; question content stays selectable
+   (right-click LaTeX copy relies on it) */
+button,
+.chip,
+.kbd {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: none;
+  background: transparent;
+  border-radius:0.625rem;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-btn:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.8125rem;
+  background: var(--panel);
+  color: var(--muted);
+  line-height: 1.625rem;
+  white-space: nowrap;
+}
+
+.chip.good {
+  color: var(--good);
+  background: var(--good-weak);
+}
+
+.chip.bad {
+  color: var(--bad);
+  background: var(--bad-weak);
+}
+
+.chip.brand {
+  color: var(--brand);
+  background: var(--brand-weak);
+}
+
+select,
+input[type='number'],
+input[type='text'] {
+  border: 1px solid var(--line);
+  border-radius:0.5rem;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  font-size: 1rem;
+  min-height: 2.75rem;
+  background: var(--card);
+  color: var(--ink);
+}
+
+select {
+  height: 2.75rem;
+}
+
+select:focus,
+input:focus {
+  outline: 2px solid var(--brand-weak);
+  border-color: var(--brand);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: 1.375rem;
+  height: 1.375rem;
+  accent-color: var(--brand);
+}
+
+input[type='number'] {
+  width: 4.75rem;
+}
+
+input[type='number'].sm {
+  width: 3.5rem;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 3rem 0;
+}
+
+.katex-display {
+  margin: 0.5rem 0;
+}
+
+/* fitmath.ts measures the inline-block width and scales overwide math down;
+   line-height 0 eats the baseline slack */
+.q-math {
+  text-align: center;
+  line-height: 0;
+}
+
+.q-math > .katex-display {
+  display: inline-block;
+  vertical-align: top;
+}
+
+/* overwide formulas toggle fit/scroll on click (state in data attributes) */
+.q-math[data-math-wide] {
+  cursor: zoom-in;
+}
+
+.q-math[data-math-mode='scroll'] {
+  cursor: zoom-out;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+.q-math[data-math-ready] > .katex-display {
+  transition: transform 0.24s ease, margin-bottom 0.24s ease;
+}
+
+/* Safari pops a native tooltip from the hidden MathML tree on hover */
+.katex .katex-mathml {
+  pointer-events: none;
+}
+
+.q-svg-wrap {
+  margin: 0.5rem 0;
+}
+
+.q-svg {
+  width: 46%;
+  max-width: 20rem;
+  height: auto;
+}
+
+/* must stay after the base .kbd rule: same specificity, order decides */
+@container (max-width: 30rem) {
+  .kbd {
+    display: none;
+  }
+}
