@@ -16,7 +16,7 @@ const historyAll = computed(() =>
     .sort((a, b) => b.at - a.at),
 )
 
-/** The record pending deletion in the confirm dialog (null = closed) */
+
 const pendingDel = ref<Rec | null>(null)
 
 async function doDelete() {
@@ -39,7 +39,7 @@ async function doClear() {
   }
 }
 
-/** Close whichever inline confirm is open; true when this consumed the key */
+
 function handleEscape(): boolean {
   if (pendingDel.value) {
     pendingDel.value = null

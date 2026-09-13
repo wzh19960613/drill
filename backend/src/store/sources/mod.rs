@@ -11,6 +11,12 @@ pub struct Source {
     pub id: String,
     pub name: String,
     pub path: PathBuf,
+
+    #[serde(default)]
+    pub recursive: bool,
+
+    #[serde(default)]
+    pub excluded: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,14 +45,10 @@ pub struct SourceStore {
 }
 
 impl SourceStore {
-    /// `root` is only a first-run convenience: when `Some` and the store
-    /// comes up empty, the directory itself is registered as the default
-    /// source. With `None` (running from source, `DRILL_ROOT` not set)
-    /// nothing is seeded and sources are managed entirely in the app.
+
     pub fn load(file: PathBuf, root: Option<&Path>) -> SourceStore {
         let store: JsonStore<Inner> = JsonStore::load(file);
-        // seed only when the store comes up empty, and skip the rewrite
-        // entirely when nothing changed
+
         let seeded = store.edit(|inner| {
             if inner.sources.is_empty() {
                 root.is_some_and(|r| seed_default(inner, r))
@@ -79,10 +81,47 @@ impl SourceStore {
                 id: format!("s{}", inner.next_id),
                 name: source_name(&path),
                 path,
+                recursive: false,
+                excluded: Vec::new(),
             };
             inner.next_id += 1;
             inner.sources.push(src.clone());
             Ok(src)
+        })
+    }
+
+    pub fn set_recursive(&self, id: &str, recursive: bool) -> Result<Source, String> {
+        self.store.mutate(|inner| {
+            let src = inner
+                .sources
+                .iter_mut()
+                .find(|s| s.id == id)
+                .ok_or_else(|| "unknown source id".to_string())?;
+            src.recursive = recursive;
+            Ok(src.clone())
+        })
+    }
+
+    pub fn mark_excluded(&self, id: &str, rel: &str, on: bool) -> Result<Source, String> {
+        self.store.mutate(|inner| {
+            let src = inner
+                .sources
+                .iter_mut()
+                .find(|s| s.id == id)
+                .ok_or_else(|| "unknown source id".to_string())?;
+            if on {
+                if !src.excluded.iter().any(|p| p == rel) {
+                    let pos = src
+                        .excluded
+                        .iter()
+                        .position(|p| p.as_str() > rel)
+                        .unwrap_or(src.excluded.len());
+                    src.excluded.insert(pos, rel.to_string());
+                }
+            } else {
+                src.excluded.retain(|p| p != rel);
+            }
+            Ok(src.clone())
         })
     }
 
@@ -107,9 +146,6 @@ impl SourceStore {
             if !inner.sources.iter().any(|s| s.id == id) {
                 return Err("unknown source id".to_string());
             }
-            if inner.sources.len() <= 1 {
-                return Err("at least one source is required".to_string());
-            }
             inner.sources.retain(|s| s.id != id);
             Ok(())
         })
@@ -124,6 +160,8 @@ fn seed_default(inner: &mut Inner, root: &Path) -> bool {
         id: format!("s{}", inner.next_id),
         name: source_name(&path),
         path,
+        recursive: false,
+        excluded: Vec::new(),
     });
     inner.next_id += 1;
     true

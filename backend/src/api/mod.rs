@@ -1,11 +1,13 @@
 mod assets;
 mod books;
 mod export;
+mod files;
 pub(crate) mod export_cache;
 mod progress;
 mod questions;
 mod records;
 mod sources;
+pub(crate) mod uploads;
 
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
@@ -23,8 +25,6 @@ pub(super) fn server_error(msg: &str) -> Response {
     (StatusCode::INTERNAL_SERVER_ERROR, msg.to_string()).into_response()
 }
 
-/// Small API error type so helpers can return `Result<_, ApiError>` without
-/// dragging a full `Response` through every `Result` (clippy::result_large_err).
 pub(super) enum ApiError {
     BadRequest(String),
     NotFound(String),
@@ -50,10 +50,12 @@ impl ApiError {
 }
 
 pub fn router(app: App) -> Router {
+    let max_upload = app.max_upload_bytes;
     question_routes()
         .merge(record_routes())
         .merge(book_routes())
         .merge(source_routes())
+        .merge(upload_routes(max_upload))
         .merge(progress_routes())
         .merge(export_routes())
         .fallback(assets::static_route)
@@ -61,7 +63,6 @@ pub fn router(app: App) -> Router {
         .layer(axum::middleware::from_fn(log_requests))
 }
 
-/// One line per request: enough to diagnose stale-cache / PWA startup issues.
 async fn log_requests(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
     let method = req.method().clone();
     let path = req.uri().path().to_string();
@@ -77,14 +78,12 @@ async fn log_requests(req: axum::extract::Request, next: axum::middleware::Next)
 
 fn question_routes() -> Router<App> {
     Router::new()
-        .route(
-            "/api/questions",
-            get(questions::list).post(questions::create),
-        )
+        .route("/api/questions", get(questions::list))
         .route("/api/questions/preview", post(questions::preview))
+        .route("/api/questions/save", post(questions::save))
         .route(
             "/api/questions/{id}",
-            put(questions::update).delete(questions::remove),
+            delete(questions::remove),
         )
         .route("/api/questions/{id}/raw", get(questions::raw))
 }
@@ -117,8 +116,27 @@ fn source_routes() -> Router<App> {
         .route("/api/sources", get(sources::list).post(sources::add))
         .route(
             "/api/sources/{id}",
-            put(sources::relocate).delete(sources::remove),
+            put(sources::update).delete(sources::remove),
         )
+        .route("/api/sources/{id}/browse", get(sources::browse))
+        .route("/api/sources/{id}/resolve-images", post(sources::resolve_images))
+        .route(
+            "/api/sources/{id}/file",
+            get(files::get).put(files::put).delete(files::delete),
+        )
+        .route("/api/sources/{id}/mark", put(files::mark))
+        .route("/api/sources/{id}/mark-folder", put(files::mark_folder))
+}
+
+fn upload_routes(max_upload: usize) -> Router<App> {
+    Router::new()
+        .route("/api/uploads", post(uploads::upload))
+        .route("/api/uploads/{id}", delete(uploads::discard))
+        .route("/api/tmp/{id}", get(uploads::temp_image))
+
+        .layer(axum::extract::DefaultBodyLimit::max(
+            max_upload.saturating_mul(2).max(4 * 1024 * 1024),
+        ))
 }
 
 fn progress_routes() -> Router<App> {
@@ -153,14 +171,10 @@ pub(super) mod test_support {
     use crate::app::App;
     use crate::store::{BookStore, MasteryStore, PausedStore, RecordStore, SourceStore};
 
-    /// An `App` backed by a throwaway temp directory with one question bank
-    /// (`bank/s1`, containing one question `P1-1`). Deletes nothing real.
     pub fn test_app(tag: &str) -> App {
         app_with_book_cap(tag, BookStore::max_books())
     }
 
-    /// Same as [`test_app`] but with a tiny book cap: every upsert rewrites
-    /// the whole books file, so cap tests must not fill the real cap.
     pub fn test_app_capped(tag: &str, cap: usize) -> App {
         app_with_book_cap(tag, cap)
     }
@@ -191,6 +205,8 @@ pub(super) mod test_support {
             paused: Arc::new(PausedStore::load(dir.join("paused.json"))),
             export_cache: Arc::new(ExportCache::new(dir.join("exports"))),
             pdf_lock: Arc::new(AsyncMutex::new(())),
+            tmp_dir: dir.join("tmp-uploads"),
+            max_upload_bytes: super::uploads::MAX_UPLOAD_BYTES,
         }
     }
 }

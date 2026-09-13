@@ -5,7 +5,7 @@ pub struct Record {
     pub id: u64,
     #[serde(rename = "questionId")]
     pub question_id: String,
-    /// Id of the source (question bank) the question belongs to.
+
     pub source: String,
     pub correct: bool,
     pub at: u64,

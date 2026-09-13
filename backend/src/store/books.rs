@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use crate::model::BookDef;
 use crate::store::json_store::JsonStore;
 
-/// Current book per subject ('' = all subjects).
 #[derive(Serialize, Deserialize, Default, Clone)]
 #[serde(transparent)]
 pub struct ActiveMap(BTreeMap<String, String>);
@@ -54,7 +53,7 @@ pub struct BookStore {
 const MAX_BOOKS: usize = 65535;
 
 impl BookStore {
-    /// Upper bound on stored books, exposed for tests and API messages.
+
     #[cfg(test)]
     pub fn max_books() -> usize {
         MAX_BOOKS
@@ -64,9 +63,6 @@ impl BookStore {
         BookStore::load_with_cap(path, MAX_BOOKS)
     }
 
-    /// Same store with an explicit cap; tests use a tiny one because every
-    /// upsert rewrites the whole books file — filling the production cap
-    /// would be a quadratic, hundred-GB write storm.
     pub fn load_with_cap(path: PathBuf, max: usize) -> BookStore {
         BookStore {
             store: JsonStore::load(path),
@@ -78,9 +74,6 @@ impl BookStore {
         self.store.view(|f| f.books.clone())
     }
 
-    /// Insert (or replace) one book at the top of the list. Adding a new
-    /// book once the list is full is rejected instead of silently dropping
-    /// the oldest entry.
     pub fn upsert(&self, def: BookDef) -> Result<(), String> {
         self.store.mutate(|f| {
             if !f.books.iter().any(|b| b.id == def.id) && f.books.len() >= self.max {
@@ -199,8 +192,7 @@ mod tests {
 
     #[test]
     fn upsert_rejects_a_new_book_at_the_cap_but_allows_replacing() {
-        // capped at 3: filling the production cap would rewrite the file
-        // quadratically (hundreds of GB of writes)
+
         let (_path, store) = store_capped("cap", 3);
         for i in 0..3 {
             store.upsert(def(&format!("b{i}"), "x")).unwrap();
@@ -210,7 +202,7 @@ mod tests {
         assert!(err.contains("上限"), "{err}");
         assert_eq!(store.list().len(), 3, "rejected book is not stored");
         assert_eq!(store.list()[0].id, "b2");
-        // replacing an existing book at the cap is still allowed
+
         store.upsert(def("b0", "replaced")).unwrap();
         assert_eq!(store.list().len(), 3);
         assert!(store

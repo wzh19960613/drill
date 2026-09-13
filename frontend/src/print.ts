@@ -5,7 +5,6 @@ export interface PrintItem extends Question {
   optionOrder: number[] | null
 }
 
-/** Wire format shared by the export dialogs and the backend PDF renderer. */
 export interface PrintPayload {
   doc: 'workbook' | 'answers'
   paper: 'A4' | 'B5'
@@ -22,7 +21,7 @@ export interface PrintPayload {
   date: string
   title?: string
   bookId?: string | null
-  /** Per-question meta line JS sources, evaluated by the backend renderer */
+
   meta?: { workbook: string; answers: string }
   fontScale?: number
   optsPerRow?: 1 | 2 | 4

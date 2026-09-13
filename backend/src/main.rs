@@ -2,6 +2,7 @@ mod api;
 mod app;
 mod demo;
 mod fsutil;
+mod images;
 mod model;
 mod parsing;
 mod pdf;
@@ -27,7 +28,10 @@ fn print_startup(app: &App) {
     let sources = app.sources.list();
     let count: usize = sources
         .iter()
-        .map(|s| parsing::load_questions_from(&s.path, &s.id).len())
+        .map(|s| {
+            let excluded: std::collections::HashSet<String> = s.excluded.iter().cloned().collect();
+            parsing::load_questions_from(&s.path, &s.id, s.recursive, &excluded).len()
+        })
         .sum();
     log_line(&format!(
         "parsed {count} questions from {} source(s)",

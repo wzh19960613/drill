@@ -19,49 +19,53 @@ export interface UseQuestionGroupsOptions {
   flat: Ref<boolean>
 }
 
+function chapterGroups(qs: Question[]): QuestionGroup[] {
+  const map = new Map<string, Question[]>()
+  for (const q of qs) {
+    const key = chapterOf(q)
+    const list = map.get(key)
+    if (list) list.push(q)
+    else map.set(key, [q])
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'zh'))
+    .map(([chapter, questions]) => ({ chapter, questions }))
+}
+
+function subjectGroupsOf(questions: Question[], flat: boolean): SubjectGroup[] {
+  if (flat) {
+    return [
+      {
+        subject: '',
+        showHead: false,
+        count: questions.length,
+        groups: [{ chapter: '', questions }],
+      },
+    ]
+  }
+  const bySubject = new Map<string, Question[]>()
+  for (const q of questions) {
+    const key = subjectOf(q)
+    const list = bySubject.get(key)
+    if (list) list.push(q)
+    else bySubject.set(key, [q])
+  }
+  const entries = [...bySubject.entries()].sort(([a], [b]) => a.localeCompare(b, 'zh'))
+  const showHead = entries.length > 1
+  return entries.map(([subject, qs]) => ({
+    subject,
+    showHead,
+    count: qs.length,
+    groups: chapterGroups(qs),
+  }))
+}
+
 export function useQuestionGroups(opts: UseQuestionGroupsOptions) {
   const collapsed = ref(new Set<string>())
 
-  function chapterGroups(qs: Question[]): QuestionGroup[] {
-    const map = new Map<string, Question[]>()
-    for (const q of qs) {
-      const key = chapterOf(q)
-      const list = map.get(key)
-      if (list) list.push(q)
-      else map.set(key, [q])
-    }
-    return [...map.entries()]
-      .sort(([a], [b]) => a.localeCompare(b, 'zh'))
-      .map(([chapter, questions]) => ({ chapter, questions }))
-  }
-
-  const subjectGroups = computed<SubjectGroup[]>(() => {
-    if (opts.flat.value) {
-      return [
-        {
-          subject: '',
-          showHead: false,
-          count: opts.questions.value.length,
-          groups: [{ chapter: '', questions: opts.questions.value }],
-        },
-      ]
-    }
-    const bySubject = new Map<string, Question[]>()
-    for (const q of opts.questions.value) {
-      const key = subjectOf(q)
-      const list = bySubject.get(key)
-      if (list) list.push(q)
-      else bySubject.set(key, [q])
-    }
-    const entries = [...bySubject.entries()].sort(([a], [b]) => a.localeCompare(b, 'zh'))
-    const showHead = entries.length > 1
-    return entries.map(([subject, qs]) => ({
-      subject,
-      showHead,
-      count: qs.length,
-      groups: chapterGroups(qs),
-    }))
-  })
+  const subjectGroups = computed<SubjectGroup[]>(() =>
+    subjectGroupsOf(opts.questions.value, opts.flat.value),
+  )
 
   const seqOf = computed(() => {
     const m = new Map<string, number>()

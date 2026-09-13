@@ -16,27 +16,27 @@ export interface HotkeyActionDef {
   action: HotkeyAction
   label: string
   def: string
-  /** Optional second binding (join with `|` in the map value) */
+
   def2?: string
 }
 
 export const HOTKEY_ACTIONS: HotkeyActionDef[] = [
   { action: 'showAnswer', label: '显示答案', def: 'Space' },
-  { action: 'markRight', label: '做对了', def: 'Space' },
-  { action: 'hideAnswer', label: '隐藏答案', def: 'KeyV' },
+  { action: 'markRight', label: '做对了', def: 'Enter' },
+  { action: 'hideAnswer', label: '隐藏答案', def: 'Space' },
   { action: 'markWrong', label: '做错了', def: 'KeyX' },
   { action: 'toggleFavorite', label: '收藏 / 取消', def: 'KeyC' },
   { action: 'prev', label: '上一题', def: 'Comma', def2: 'ArrowLeft' },
   { action: 'next', label: '跳过（下一题）', def: 'Period', def2: 'ArrowRight' },
   { action: 'timerToggle', label: '暂停 / 恢复计时', def: 'KeyZ' },
   { action: 'timerReset', label: '重置计时', def: 'KeyN' },
-  { action: 'markMastered', label: '标记 / 取消', def: 'Slash' },
+  { action: 'markMastered', label: '已熟练 / 取消', def: 'Slash', def2: 'Backspace' },
 ]
 
 export type HotkeyMap = Record<HotkeyAction, string>
 
 const STORAGE = StorageKeys.hotkeys
-const SCHEMA_V = 3
+const SCHEMA_V = 4
 
 export function defaultHotkeys(): HotkeyMap {
   const m = {} as HotkeyMap
@@ -44,7 +44,6 @@ export function defaultHotkeys(): HotkeyMap {
   return m
 }
 
-/** The key codes of one action's binding: `KeyX|KeyY` → ['KeyX', 'KeyY'] */
 export function keysOf(v: string): string[] {
   return v ? v.split('|').filter(Boolean) : []
 }
@@ -101,14 +100,23 @@ export function primaryCode(v: string): string {
   return keysOf(v)[0] ?? ''
 }
 
-/** Formats one action's binding(s): `Comma|ArrowLeft` → `, / ←` */
 export function fmtKey(v: string): string {
   const parts = keysOf(v).map(fmtSingle)
   return parts.length ? parts.join(' / ') : '未绑定'
 }
 
-/** Reverse lookup code → actions; one key can serve multiple actions
- *  (e.g. Space = show answer + mark right) */
+/** Space is bound to both show and hide: each side only acts on the
+ *  opposite press-time state, so one key toggles cleanly instead of the two
+ *  cancelling out. */
+export function applyAnswerActions(openAtPress: boolean, actions: HotkeyAction[]): boolean {
+  let open = openAtPress
+  for (const a of actions) {
+    if (a === 'showAnswer' && !openAtPress) open = true
+    else if (a === 'hideAnswer' && openAtPress) open = false
+  }
+  return open
+}
+
 export function codeIndex(m: HotkeyMap): Map<string, HotkeyAction[]> {
   const idx = new Map<string, HotkeyAction[]>()
   for (const [action, v] of Object.entries(m)) {

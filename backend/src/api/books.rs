@@ -28,7 +28,7 @@ pub async fn save(State(app): State<App>, Json(mut def): Json<BookDef>) -> Respo
 
 pub async fn remove(State(app): State<App>, AxPath(id): AxPath<String>) -> Response {
     if app.books.delete(&id) {
-        // the book is gone; its derived PDFs are stale by definition
+
         app.export_cache.remove_book(&id);
         StatusCode::NO_CONTENT.into_response()
     } else {
@@ -36,7 +36,6 @@ pub async fn remove(State(app): State<App>, AxPath(id): AxPath<String>) -> Respo
     }
 }
 
-/// The current book is tracked per subject ('' = all subjects).
 pub async fn get_active(
     State(app): State<App>,
     Query(params): Query<HashMap<String, String>>,
@@ -77,8 +76,6 @@ pub async fn set_favorite(State(app): State<App>, Json(body): Json<FavoriteBook>
     StatusCode::NO_CONTENT.into_response()
 }
 
-/// Reject a request that references a book id that does not exist (None
-/// clears the slot and is always allowed).
 fn unknown_book_response(app: &App, id: &Option<String>) -> Option<Response> {
     let unknown = id
         .as_ref()
@@ -130,8 +127,7 @@ mod tests {
 
     #[tokio::test]
     async fn posting_beyond_the_book_cap_is_a_400() {
-        // tiny cap: filling the production cap would rewrite the books file
-        // quadratically (hundreds of GB of writes)
+
         let app = test_app_capped("bookcap", 3);
         for i in 0..3 {
             app.books

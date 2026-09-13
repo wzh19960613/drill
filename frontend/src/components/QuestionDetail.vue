@@ -3,19 +3,20 @@ import { computed, ref } from 'vue'
 import {
   BadgeCheck,
   Check,
+  CheckSquare,
   ChevronLeft,
   ChevronRight,
   MoreHorizontal,
   Pencil,
   Play,
+  Square,
   Trash2,
   XCircle,
 } from 'lucide-vue-next'
 import type { Question } from '../types'
 import { acc5Percent, addRecord, chapterOf, currentSubject, isMastered, statsOf, toggleMastered } from '../store'
 import { useFavorites } from '../composables/useFavorites'
-import { deleteQuestionApi } from '../api'
-import { codeIndex, loadHotkeys, type HotkeyAction } from '../hotkeys'
+import { applyAnswerActions, codeIndex, fmtKey, loadHotkeys, primaryCode, type HotkeyAction } from '../hotkeys'
 import { COPY_MENU_ITEMS, copyQuestionPart } from '../composables/copyText'
 import { useDialogShell } from '../composables/useDialogShell'
 import { useAnchoredMenu } from '../composables/useAnchoredMenu'
@@ -23,6 +24,7 @@ import { fmtTime } from '../format'
 import DialogHeader from './DialogHeader.vue'
 import FavoriteStar from './FavoriteStar.vue'
 import MenuPop, { type MenuPopItem } from './MenuPop.vue'
+import QuestionDeleteDialog from './QuestionDeleteDialog.vue'
 import QuestionView from './QuestionView.vue'
 import QuestionHistoryList from './question/QuestionHistoryList.vue'
 
@@ -32,8 +34,10 @@ const props = withDefaults(
     editable?: boolean
     studyable?: boolean
     siblings?: Question[]
+    selectMode?: boolean
+    selected?: boolean
   }>(),
-  { editable: false, studyable: false, siblings: () => [] },
+  { editable: false, studyable: false, siblings: () => [], selectMode: false, selected: false },
 )
 
 const emit = defineEmits<{
@@ -42,7 +46,11 @@ const emit = defineEmits<{
   (e: 'deleted', q: Question): void
   (e: 'studyFrom', q: Question): void
   (e: 'navigate', q: Question): void
+  (e: 'toggleSelect', q: Question, on: boolean): void
 }>()
+
+/** select mode (book building) opens with the answer revealed */
+const ansOpen = ref(props.selectMode)
 
 const favs = useFavorites()
 
@@ -87,6 +95,14 @@ const stats = computed(() => statsOf(props.q))
 
 const showSubject = computed(() => !!props.q.subject && currentSubject.value === '')
 
+
+const headTitle = computed(() => {
+  const q = props.q
+  if (q.locate) return q.locate
+  const anyMeta = q.origin || q.subject || q.chapter || q.qtype
+  return anyMeta ? '' : (q.file || q.id)
+})
+
 const acc5 = computed(() => acc5Percent(props.q))
 
 async function mark(correct: boolean) {
@@ -95,21 +111,16 @@ async function mark(correct: boolean) {
 
 const histRef = ref<InstanceType<typeof QuestionHistoryList> | null>(null)
 
-const delConfirm = ref(false)
-const deleting = ref(false)
 
-async function doDelete() {
-  deleting.value = true
-  try {
-    await deleteQuestionApi(props.q.id, props.q.source)
-    emit('deleted', props.q)
-    emit('close')
-  } finally {
-    deleting.value = false
-  }
+const delConfirm = ref(false)
+
+function onDeleted() {
+  emit('deleted', props.q)
+  emit('close')
 }
 
-const hotkeyIdx = computed(() => codeIndex(loadHotkeys()))
+const hotkeys = loadHotkeys()
+const hotkeyIdx = computed(() => codeIndex(hotkeys))
 
 function runDialogAction(a: HotkeyAction): boolean {
   if (a === 'prev' && prevQ.value) {
@@ -126,6 +137,28 @@ function runDialogAction(a: HotkeyAction): boolean {
   }
   if (a === 'toggleFavorite') {
     void toggleFav()
+    return true
+  }
+  if (a === 'markRight' && !props.selectMode) {
+    void mark(true)
+    return true
+  }
+  if (a === 'markWrong' && !props.selectMode) {
+    void mark(false)
+    return true
+  }
+  return false
+}
+
+/** select mode swaps the verdict shortcuts for select / deselect */
+function runSelectKeys(e: KeyboardEvent): boolean {
+  if (!props.selectMode) return false
+  if (e.code === 'Enter' && !props.selected) {
+    emit('toggleSelect', props.q, true)
+    return true
+  }
+  if (e.code === 'Backspace' && props.selected) {
+    emit('toggleSelect', props.q, false)
     return true
   }
   return false
@@ -146,8 +179,16 @@ useDialogShell((e) => {
     emit('close')
     return
   }
-  const actions = hotkeyIdx.value.get(e.code)
-  if (actions?.length && actions.some((a) => runDialogAction(a))) {
+  if (runSelectKeys(e)) {
+    e.preventDefault()
+    e.stopPropagation()
+    return
+  }
+  const openAtPress = ansOpen.value
+  const actions = hotkeyIdx.value.get(e.code) ?? []
+  const answerActions = actions.filter((a) => a === 'showAnswer' || a === 'hideAnswer')
+  if (answerActions.length) ansOpen.value = applyAnswerActions(openAtPress, answerActions)
+  if (actions.some((a) => runDialogAction(a))) {
     e.preventDefault()
     e.stopPropagation()
   }
@@ -161,8 +202,8 @@ useDialogShell((e) => {
       <div class="qm-headwrap">
         <DialogHeader no-border flush @close="emit('close')">
           <template #title>
-            <span class="qm-qid">{{ q.locate || '未知' }}</span>
-            <span v-if="q.origin" class="qm-src"> @ {{ q.origin }}</span>
+            <span v-if="headTitle" class="qm-qid">{{ headTitle }}</span>
+            <span v-if="q.origin" class="qm-src">{{ q.locate ? ' @ ' : '' }}{{ q.origin }}</span>
             <span v-if="showSubject" class="qm-src"> [{{ q.subject }}]</span>
           </template>
           <template #subtitle>{{ [chapterOf(q), q.qtype].filter(Boolean).join(' · ') }}</template>
@@ -228,33 +269,51 @@ useDialogShell((e) => {
           <template v-else>尚未做过本题</template>
         </div>
 
-        <QuestionView :q="q" :show-answer="true" :show-meta="false" :fold-answer="true" />
+        <QuestionView
+          v-model:answer-open="ansOpen"
+          :q="q"
+          :show-answer="true"
+          :show-meta="false"
+          :fold-answer="true"
+        />
 
         <QuestionHistoryList ref="histRef" :q="q" />
       </div>
 
       <div class="qm-foot">
-        <template v-if="editable && delConfirm">
-          <span class="del-confirm">删除题目文件？（保留 .bak 备份，记录统计不再包含它）</span>
-          <button class="btn bad sm" :disabled="deleting" @click="doDelete">确认删除</button>
-          <button class="btn ghost sm" @click="delConfirm = false">取消</button>
-        </template>
-        <template v-else>
-          <div class="qm-foot-side">
-            <button v-if="studyable" class="btn primary sm" @click="emit('studyFrom', q)">
-              <Play style="width: 0.875rem; height: 0.875rem" /> 从此题处开始刷题
-            </button>
-          </div>
-          <div class="qm-mark-row">
-            <button class="btn good sm" @click="mark(true)">
-              <Check style="width: 0.875rem; height: 0.875rem" /> 又对了一次
-            </button>
-            <button class="btn bad sm" @click="mark(false)">
-              <XCircle style="width: 0.875rem; height: 0.875rem" /> 又错了一次
-            </button>
-          </div>
-        </template>
+        <div class="qm-foot-side">
+          <button v-if="studyable" class="btn primary sm" @click="emit('studyFrom', q)">
+            <Play style="width: 0.875rem; height: 0.875rem" /> 从此题处开始刷题
+          </button>
+        </div>
+        <div v-if="selectMode" class="qm-mark-row">
+          <button class="btn sm qm-select" :class="{ on: selected }" @click="emit('toggleSelect', q, !selected)">
+            <component
+              :is="selected ? CheckSquare : Square"
+              style="width: 1rem; height: 1rem"
+            />
+            {{ selected ? '已选中' : '未选中' }}
+            <span class="kbd">{{ selected ? '⌫ 取消' : '回车 选中' }}</span>
+          </button>
+        </div>
+        <div v-else class="qm-mark-row">
+          <button class="btn good sm" @click="mark(true)">
+            <Check style="width: 0.875rem; height: 0.875rem" /> 做对了
+            <span class="kbd">{{ fmtKey(primaryCode(hotkeys.markRight)) }}</span>
+          </button>
+          <button class="btn bad sm" @click="mark(false)">
+            <XCircle style="width: 0.875rem; height: 0.875rem" /> 做错了
+            <span class="kbd">{{ fmtKey(primaryCode(hotkeys.markWrong)) }}</span>
+          </button>
+        </div>
       </div>
+
+      <QuestionDeleteDialog
+        v-if="delConfirm"
+        :question="q"
+        @close="delConfirm = false"
+        @deleted="onDeleted"
+      />
     </div>
   </div>
   </Teleport>
@@ -400,5 +459,20 @@ useDialogShell((e) => {
   color: var(--muted);
   font-size: 0.875rem;
   font-weight: 400;
+}
+
+.qm-mark-row .kbd {
+  margin-left: 0.125rem;
+  padding: 0 0.375rem;
+  border-radius: var(--radius-pill, 0.375rem);
+  background: var(--hover);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.375rem;
+}
+
+.qm-select.on {
+  color: var(--brand);
+  border-color: var(--brand);
 }
 </style>

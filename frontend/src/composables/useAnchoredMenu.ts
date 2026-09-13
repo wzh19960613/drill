@@ -1,9 +1,5 @@
 import { ref } from 'vue'
 
-/**
- * Menu anchored to the button that toggled it (x/y for MenuPop). The 4px gap
- * is optical, so px is allowed.
- */
 export function useAnchoredMenu(edge: 'left' | 'right' = 'right') {
   const open = ref(false)
   const x = ref(0)

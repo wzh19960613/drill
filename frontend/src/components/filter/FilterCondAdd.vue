@@ -183,6 +183,13 @@ function addNow() {
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
+}
+
+/* the label's own ellipsis never applies to the inner span's text — put
+   the truncation on the span so long chapter names show an ellipsis */
+.fb-opt span {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
 }
 

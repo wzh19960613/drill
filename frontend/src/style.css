@@ -22,6 +22,9 @@
   --shadow-modal: 0 16px 56px rgba(0, 0, 0, 0.24);
   --shadow-float: 0 22px 56px rgba(0, 0, 0, 0.34), 0 4px 14px rgba(0, 0, 0, 0.18);
   --shadow-inset: 0 1px 4px rgba(0, 0, 0, 0.08);
+  /* scrim for a dialog stacked on another dialog (slightly deeper than the
+     base .modal-mask 0.35 so the layering reads); reuse, don't hand-copy */
+  --scrim-nested: rgba(0, 0, 0, 0.45);
   /* stacking layers, low to high: list sticky (1-2) < bar < floating bar <
      modal family < menu < toast */
   --z-bar: 10;
@@ -104,6 +107,7 @@ html[data-theme='dark'] .q-svg {
     align-self: stretch;
     width: 100%;
     flex: none;
+    height: auto;
     max-height: none;
     border-radius: 0;
   }
@@ -296,6 +300,16 @@ main.fullscreen:has(> .splash) {
 h3 {
   margin: 0 0 0.625rem;
   font-size: 0.9375rem;
+}
+
+/* lucide svgs are inline by default: they sit on the text baseline and read
+   a hair high and small next to their label. One central optical rule for
+   every button — do not patch icons per component. display:inline-block
+   enables the transform in text-flow buttons and is inert in flex ones. */
+button svg {
+  display: inline-block;
+  vertical-align: -0.0938em;
+  transform: translateY(0.5px) scale(1.09);
 }
 
 .btn {
@@ -625,7 +639,8 @@ button,
 
 select,
 input[type='number'],
-input[type='text'] {
+input[type='text'],
+input[type='search'] {
   border: 1px solid var(--line);
   border-radius:0.5rem;
   padding: 0.5rem 0.75rem;
@@ -638,6 +653,12 @@ input[type='text'] {
 
 select {
   height: 2.75rem;
+}
+
+/* search inputs only: drop Safari's native (rounded) search appearance —
+   selects must keep their native arrow */
+input[type='search'] {
+  appearance: none;
 }
 
 select:focus,
@@ -683,6 +704,14 @@ input[type='number'].sm {
   vertical-align: top;
 }
 
+/* adjacent formulas merged into one .q-math group: a block separator with
+   negative margins cancelling the uncollapsing inline-block margins on
+   both sides (0.5rem + 0.5rem) down to a tight rhythm */
+.q-math-sep {
+  display: block;
+  margin: -0.625rem 0 -0.125rem;
+}
+
 /* overwide formulas toggle fit/scroll on click (state in data attributes) */
 .q-math[data-math-wide] {
   cursor: zoom-in;
@@ -692,6 +721,13 @@ input[type='number'].sm {
   cursor: zoom-out;
   overflow-x: auto;
   overscroll-behavior-x: contain;
+}
+
+/* mouse-drag panning while zoomed (set from fitmath.ts) */
+.q-math[data-math-panning] {
+  cursor: grabbing;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .q-math[data-math-ready] > .katex-display {
@@ -708,9 +744,87 @@ input[type='number'].sm {
 }
 
 .q-svg {
-  width: 46%;
-  max-width: 20rem;
+  width: 100%;
   height: auto;
+  cursor: zoom-in;
+}
+
+/* Markdown headings rendered from question sections and file previews
+   (levels 1/2 only occur in non-question documents) */
+.md-h {
+  font-weight: 700;
+  margin: 0.375rem 0 0.125rem;
+  line-height: 1.5;
+}
+
+.md-h1 {
+  font-size: 1.25rem;
+}
+
+.md-h2 {
+  font-size: 1.125rem;
+}
+
+.md-h3 {
+  font-size: 1.0625rem;
+}
+
+.md-h4 {
+  font-size: 1rem;
+}
+
+.md-h5,
+.md-h6 {
+  font-size: 0.9375rem;
+}
+
+/* markdown lists / tables / code rendered from question content */
+.md-list {
+  margin: 0.25rem 0;
+  padding-inline-start: 1.5rem;
+}
+
+.md-list li {
+  margin: 0.125rem 0;
+}
+
+.md-table {
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.875rem;
+}
+
+.md-table th,
+.md-table td {
+  border: 1px solid var(--line);
+  padding: 0.3125rem 0.625rem;
+  text-align: left;
+}
+
+.md-table th {
+  background: var(--panel);
+}
+
+.md-code {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  margin: 0.5rem 0;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8438rem;
+  line-height: 1.7;
+  white-space: pre;
+}
+
+code.md-icode {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 0.3125rem;
+  padding: 0 0.3125rem;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
 }
 
 /* must stay after the base .kbd rule: same specificity, order decides */

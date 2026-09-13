@@ -19,9 +19,15 @@ const LINE_DEF: Record<'sepQ' | 'sepHead' | 'sepFoot', LineSpec> = {
   sepFoot: { style: 'none', width: 0.6, gap: 2 },
 }
 
-/** Load persisted export options; invalid values fall back to defaults */
 export function loadExportOpts(): ExportOpts {
-  const def: ExportOpts = {
+  const def = defaultExportOpts()
+  const saved = readJSON<Partial<ExportOpts>>(StorageKeys.exportOpts)
+  if (saved && typeof saved === 'object') Object.assign(def, saved)
+  return sanitizeExportOpts(def)
+}
+
+function defaultExportOpts(): ExportOpts {
+  return {
     paper: 'A4',
     perPage: 2,
     bindingExtra: 6,
@@ -47,8 +53,9 @@ export function loadExportOpts(): ExportOpts {
     footerFlip: '',
     customStyle: '',
   }
-  const saved = readJSON<Partial<ExportOpts>>(StorageKeys.exportOpts)
-  if (saved && typeof saved === 'object') Object.assign(def, saved)
+}
+
+function sanitizeExportOpts(def: ExportOpts): ExportOpts {
   if (def.paper !== 'A4' && def.paper !== 'B5') def.paper = 'A4'
   if (!FONT_STEPS.some((s) => s.fs === def.fontScale)) def.fontScale = 1
   if (![4, 2, 1].includes(def.optsPerRow)) def.optsPerRow = 4
@@ -73,8 +80,6 @@ export function loadExportOpts(): ExportOpts {
   return def
 }
 
-/** Shared export-options state: every consumer (dialog, option panels) edits
- *  the same reactive object; persist() writes it back to localStorage */
 const sharedOpts = reactive<ExportOpts>(loadExportOpts())
 
 export function useExportPrefs() {

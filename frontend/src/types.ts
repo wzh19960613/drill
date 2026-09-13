@@ -11,11 +11,14 @@ export interface QCore {
   locate?: string
   chapter: string
   qtype: string
+
+  file?: string
   stem: string[]
   options: QOption[]
   correct_id: number | null
   correct_ids?: number[]
-  answer_line: string
+
+  answer: string[]
   solution: string[]
   notes?: string[]
 }
@@ -33,7 +36,7 @@ export type Question = QCore
 export interface Rec {
   id: number
   questionId: string
-  /** The question's owning source id (question ids are only unique per source) */
+
   source: string
   correct: boolean
   at: number
@@ -44,7 +47,7 @@ export type Paper = 'A4' | 'B5'
 
 export interface BookItemDef {
   id: string
-  /** Owning source id: same question id can exist in different sources */
+
   source: string
   optionOrder: number[] | null
 }
@@ -65,7 +68,6 @@ export interface PausedResult {
   ms?: number
 }
 
-/** An interrupted study session (single slot, server persisted) */
 export interface PausedSession {
   title: string
   seed: string

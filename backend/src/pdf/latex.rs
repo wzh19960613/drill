@@ -32,6 +32,12 @@ fn escape_typst_string(src: &str) -> String {
     src.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn patch_symbol_names(converted: &str) -> String {
+    static RE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = RE.get_or_init(|| regex::Regex::new(r"\bdiff\b").unwrap());
+    re.replace_all(converted, "partial").into_owned()
+}
+
 pub fn inline(latex: &str) -> String {
     inline_inner(latex, false)
 }
@@ -47,16 +53,35 @@ fn inline_inner(latex: &str, display_fractions: bool) -> String {
         normalize(latex)
     };
     match mitex::convert_math(&normalized, None) {
-        Ok(converted) => format!("#mi(\"{}\")", escape_typst_string(&converted)),
+        Ok(converted) => format!("#mi(\"{}\")", escape_typst_string(&patch_symbol_names(&converted))),
         Err(_) => raw_fallback(latex),
     }
 }
 
 pub fn block(latex: &str) -> String {
     match mitex::convert_math(&normalize(latex), None) {
-        Ok(converted) => format!("#mm(\"{}\")", escape_typst_string(&converted)),
+        Ok(converted) => format!("#mm(\"{}\")", escape_typst_string(&patch_symbol_names(&converted))),
         Err(_) => raw_fallback(latex),
     }
+}
+
+pub fn blocks(latexes: &[String]) -> String {
+    let mut inner = String::new();
+    for latex in latexes {
+        match mitex::convert_math(&normalize(latex), None) {
+            Ok(c) => {
+
+                inner.push_str(&format!(
+                    "#block(width: 100%, above: 0.4em, below: 0.4em)[#mm(\"{}\")]\n",
+                    escape_typst_string(&patch_symbol_names(&c))
+                ));
+            }
+            Err(_) => {
+                return latexes.iter().map(|l| block(l)).collect::<Vec<_>>().join("\n");
+            }
+        }
+    }
+    format!("#block[\n{inner}]\n")
 }
 
 fn raw_fallback(latex: &str) -> String {

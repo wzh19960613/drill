@@ -1,8 +1,6 @@
 import type { BookDef, PausedSession, Question, Rec } from './types'
 import type { PrintPayload } from './print'
 
-/** Shared non-2xx handling: prefer the backend's message, fall back to a
- *  status-qualified label */
 async function assertOk(r: Response, fallback: string): Promise<void> {
   if (r.ok) return
   const text = await r.text().catch(() => '')
@@ -46,7 +44,6 @@ export function fetchRecords(): Promise<Rec[]> {
   return req('/api/records')
 }
 
-/** Normalize a duration for storage: round, drop missing/non-positive values */
 export function normalizeMs(ms: number | undefined): number | undefined {
   return ms != null && ms > 0 ? Math.round(ms) : undefined
 }
@@ -81,7 +78,9 @@ export interface SourceInfo {
   name: string
   path: string
   exists: boolean
+  recursive: boolean
   count: number
+  excluded: string[]
 }
 
 export function fetchSources(): Promise<SourceInfo[]> {
@@ -96,22 +95,154 @@ export function addSource(path: string): Promise<{ id: string; name: string; pat
   })
 }
 
+export function updateSource(
+  id: string,
+  body: { path?: string; recursive?: boolean },
+): Promise<{ id: string; name: string; path: string; recursive: boolean }> {
+  return req(`/api/sources/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export function removeSource(id: string): Promise<void> {
   return req(`/api/sources/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-export function relocateSource(
-  id: string,
-  path: string,
-): Promise<{ id: string; name: string; path: string }> {
-  return req(`/api/sources/${encodeURIComponent(id)}`, {
-    method: 'PUT',
+export interface BrowseInfo {
+  path: string
+  dirs: string[]
+
+  dirInfo: { name: string; questions: number; other_md: number; questionsAll: number }[]
+  questions: { file: string; id: string }[]
+  other_md: { file: string; reason: string }[]
+  files: string[]
+  total: number
+}
+
+export function browseSource(id: string, path: string): Promise<BrowseInfo> {
+  return req(`/api/sources/${encodeURIComponent(id)}/browse?path=${encodeURIComponent(path)}`)
+}
+
+export interface ResolvedImage {
+  name: string
+  found: boolean
+  source: string | null
+  dir: string
+}
+
+export function resolveImages(source: string, names: string[]): Promise<ResolvedImage[]> {
+  return req(`/api/sources/${encodeURIComponent(source)}/resolve-images`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
+    body: JSON.stringify({ names }),
   })
 }
 
-export function fetchQuestionRaw(id: string, source: string): Promise<{ markdown: string }> {
+export interface ClassifyInfo {
+  path: string
+
+  question: boolean
+
+  marked: boolean
+
+  reason: string | null
+}
+
+export interface FolderMarkImpact {
+  path: string
+  count: number
+  impact: { name: string; count: number }[]
+}
+
+/** Dry run of the folder mark: affected questions and the books citing them. */
+export function checkSourceFolderMark(source: string, path: string): Promise<FolderMarkImpact> {
+  return req(`/api/sources/${encodeURIComponent(source)}/mark-folder`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, non_question: true, check: true }),
+  })
+}
+
+/** Mark or unmark a whole folder as non-questions (covers its subtree). */
+export function markSourceFolder(source: string, path: string, nonQuestion: boolean): Promise<void> {
+  return req(`/api/sources/${encodeURIComponent(source)}/mark-folder`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, non_question: nonQuestion }),
+  })
+}
+
+export function getSourceFile(source: string, path: string): Promise<{ markdown: string }> {
+  return req(
+    `/api/sources/${encodeURIComponent(source)}/file?path=${encodeURIComponent(path)}`,
+  )
+}
+
+export function putSourceFile(
+  source: string,
+  path: string,
+  markdown: string,
+): Promise<ClassifyInfo> {
+  return req(`/api/sources/${encodeURIComponent(source)}/file`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, markdown }),
+  })
+}
+
+export function deleteSourceFile(source: string, path: string): Promise<void> {
+  return req(
+    `/api/sources/${encodeURIComponent(source)}/file?path=${encodeURIComponent(path)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export function markSourceFile(
+  source: string,
+  path: string,
+  nonQuestion: boolean,
+): Promise<ClassifyInfo> {
+  return req(`/api/sources/${encodeURIComponent(source)}/mark`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, non_question: nonQuestion }),
+  })
+}
+
+export interface TempUpload {
+
+  id: string
+
+  name: string
+}
+
+export async function uploadImage(file: File): Promise<TempUpload> {
+  const r = await fetch(`/api/uploads?name=${encodeURIComponent(file.name)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: await file.arrayBuffer(),
+  })
+  await assertOk(r, `上传图片失败（${r.status}）`)
+  return r.json()
+}
+
+export function discardTemp(id: string): Promise<void> {
+  return req(`/api/uploads/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export interface QuestionRaw {
+  id: string
+  source: string
+  markdown: string
+
+  dir: string
+
+  file: string
+}
+
+export function fetchQuestionRaw(id: string, source: string): Promise<QuestionRaw> {
   return req(`/api/questions/${encodeURIComponent(id)}/raw?source=${encodeURIComponent(source)}`)
 }
 
@@ -123,19 +254,27 @@ export function previewQuestion(markdown: string, source: string): Promise<Quest
   })
 }
 
-export function createQuestion(markdown: string, source: string): Promise<Question> {
-  return req('/api/questions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markdown, source }),
-  })
+export interface SaveImagePayload {
+  temp: string
+  name: string
 }
 
-export function updateQuestionApi(id: string, markdown: string, source: string): Promise<Question> {
-  return req(`/api/questions/${encodeURIComponent(id)}`, {
-    method: 'PUT',
+export interface SaveQuestionPayload {
+  source: string
+  dir: string
+  filename: string
+  markdown: string
+  images?: SaveImagePayload[]
+  renames?: { from: string; to: string }[]
+
+  original?: string
+}
+
+export function saveQuestion(payload: SaveQuestionPayload): Promise<Question> {
+  return req('/api/questions/save', {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ markdown, source }),
+    body: JSON.stringify(payload),
   })
 }
 
@@ -186,7 +325,6 @@ export function deleteBookApi(id: string): Promise<void> {
   return req(`/api/books/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
-/** The active book is remembered per subject ('' = all subjects) */
 export function getActiveBookApi(subject: string): Promise<string | null> {
   return req<{ id: string | null }>(
     `/api/books/active?subject=${encodeURIComponent(subject)}`,
@@ -200,8 +338,6 @@ export function setActiveBookApi(subject: string, id: string | null): Promise<vo
     body: JSON.stringify({ subject, id }),
   })
 }
-
-// ———————— Interrupted sessions (single slot snapshot) ————————
 
 export function getPaused(): Promise<PausedSession | null> {
   return req<PausedSession | null>('/api/paused')

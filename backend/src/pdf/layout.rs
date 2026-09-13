@@ -1,16 +1,10 @@
-//! Two-pass pagination, mirroring the browser print page.
-
 use super::document;
 use super::payload::ExportPayload;
 
-/// Page-content constants of the print page (mm).
 pub(crate) const GAP: f64 = 2.0;
-/// Conservative bonus over measured heights to absorb rounding differences.
+
 pub(crate) const MEASURE_PAD: f64 = 1.5;
 
-/// Text environment shared by the measuring and the final document: both
-/// MUST render with identical text/paragraph settings, otherwise the
-/// measured heights will not match the real layout.
 pub(crate) fn text_env(payload: &ExportPayload) -> String {
     let base = 10.5 * payload.font_scale.max(0.5);
     format!(
@@ -19,8 +13,6 @@ pub(crate) fn text_env(payload: &ExportPayload) -> String {
     )
 }
 
-/// Source of the measuring document: one question per tall page, with an
-/// `H<height>X` marker rendered next to each block for extraction.
 pub fn build_measure_source(payload: &ExportPayload, images: &document::ImageSlots) -> String {
     let (w, _) = document::paper_size(&payload.paper);
     let mx = document::measure_width(payload);
@@ -47,7 +39,6 @@ pub fn build_measure_source(payload: &ExportPayload, images: &document::ImageSlo
     doc
 }
 
-/// Pull the `H<value>X` markers out of the measuring document, in page order.
 pub fn extract_heights(doc: &typst_layout::PagedDocument) -> Vec<f64> {
     let mut heights = Vec::new();
     for page in doc.pages() {
@@ -76,9 +67,6 @@ fn parse_marker(text: &str) -> Option<f64> {
     text[start..end].parse().ok()
 }
 
-/// Greedy packing of questions into pages (frontend `repack`).
-/// Each page takes up to `perPage` questions while the measured heights plus
-/// the gaps between blocks still fit the page capacity.
 pub fn repack(heights: &[f64], payload: &ExportPayload) -> Vec<Vec<usize>> {
     let capacity = document::page_capacity(payload);
     let per_page = if payload.per_page == 0 {

@@ -21,16 +21,12 @@ export function fmtTime(ms: number | null): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${hm}`
 }
 
-/** Today's date as ISO YYYY-MM-DD in the local timezone
- *  (Date.toISOString would shift the day by the UTC offset) */
 export function isoToday(): string {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-/** ISO storage date (YYYY-MM-DD) → zh-CN display '2026/9/5';
- *  anything else (e.g. legacy stored formats) shows as-is */
 export function dateZh(iso: string): string {
   const m = iso?.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/)
   if (!m) return iso

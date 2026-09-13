@@ -77,7 +77,7 @@ function closeMd() {
 useDialogShell((e) => {
   if (e.code === 'Escape') {
     e.stopPropagation()
-    if (pdfDialogOpen.value || mdOpen.value) return // 二级弹窗自行处理
+    if (pdfDialogOpen.value || mdOpen.value) return 
     emit('close')
   }
 })

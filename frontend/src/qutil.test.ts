@@ -16,7 +16,7 @@ function q(partial: Partial<QCore>): QCore {
     ],
     correct_id: 2,
     correct_ids: [2],
-    answer_line: '**(B)**。',
+    answer: [],
     solution: [],
     ...partial,
   }
@@ -54,7 +54,7 @@ describe('answerIds', () => {
 
 describe('remapIds', () => {
   it('remaps correct ids into display positions, sorted', () => {
-    // option 2 sits at position 0, option 1 at position 1
+
     expect(remapIds(q({ correct_ids: [2, 1] }), [1, 0, 2])).toEqual([1, 2])
   })
 

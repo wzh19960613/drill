@@ -15,7 +15,7 @@ function mkQuestion(id: string, partial: Partial<Question> = {}): Question {
     options: [],
     correct_id: null,
     correct_ids: [],
-    answer_line: '',
+    answer: [],
     solution: [],
     ...partial,
   }
@@ -67,11 +67,11 @@ describe('applyFilter conditions', () => {
         includeMastered: true,
         conds: [Object.assign({ id: 'c', kind: 'recentWrong' }, { n, m }) as Cond],
       })
-    // P1-1's most recent attempt is correct → default condition misses
+
     expect(f().map((x) => x.id)).toEqual([])
-    // ≥2 wrong within the last 3 → P1-1
+
     expect(f(3, 2).map((x) => x.id)).toEqual(['P1-1'])
-    // never-attempted questions never satisfy recentWrong
+
     expect(f(5, 1).map((x) => x.id)).toEqual(['P1-1'])
   })
 
@@ -90,10 +90,10 @@ describe('applyFilter conditions', () => {
   it('combines with all / any', () => {
     const a: Cond = { id: 'a', kind: 'subject', values: ['物理'] }
     const b: Cond = { id: 'b', kind: 'qtype', values: ['填空题'] }
-    // No question is both physics and fill-in
+
     const all = applyFilter(store.questions, { ...defaultFilter(), includeMastered: true, conds: [a, b], match: 'all' })
     expect(all).toEqual([])
-    // any: physics P1-2 or fill-in P1-3
+
     const any = applyFilter(store.questions, { ...defaultFilter(), includeMastered: true, conds: [a, b], match: 'any' })
     expect(any.map((x) => x.id)).toEqual(['P1-2', 'P1-3'])
   })
@@ -105,7 +105,7 @@ describe('applyFilter conditions', () => {
     ]
     store.questions = bank
     store.masteries = []
-    // wrong records only under s1/P1-1
+
     store.records = [rec('P1-1', false, 100), rec('P1-1', false, 200)]
     const f = applyFilter(bank, {
       ...defaultFilter(),
@@ -113,7 +113,7 @@ describe('applyFilter conditions', () => {
     })
     expect(f).toHaveLength(1)
     expect(f[0].source).toBe('s1')
-    // the s2 twin stays untouched (0 wrong)
+
     const none = applyFilter(bank, {
       ...defaultFilter(),
       conds: [{ id: 'c', kind: 'count', what: 'wrong', op: '=', n: 0 }],
@@ -157,5 +157,36 @@ describe('condLabel', () => {
     }
     expect(condLabel({ id: 'x', kind: 'count', what: 'wrong', op: '>=', n: 5 })).toContain('做错')
     expect(condLabel({ id: 'x', kind: 'recentWrong', n: 5, m: 1 })).toContain('5')
+  })
+})
+
+describe('搜索', () => {
+  const q = mkQuestion('P1-1', {
+    file: '题目模板.md',
+    origin: '张宇1000题',
+    chapter: '第5章',
+    stem: ['设 f(x) 连续______。'],
+    answer: ['42。'],
+    solution: ['由连续性可知。'],
+  })
+
+  it('匹配文件名/元数据/内容（不区分大小写）', () => {
+    expect(applyFilter([q], { ...defaultFilter(), search: '题目模板' })).toHaveLength(1)
+    expect(applyFilter([q], { ...defaultFilter(), search: '张宇' })).toHaveLength(1)
+    expect(applyFilter([q], { ...defaultFilter(), search: '连续' })).toHaveLength(1)
+    expect(applyFilter([q], { ...defaultFilter(), search: '不存在的内容' })).toHaveLength(0)
+    expect(applyFilter([q], { ...defaultFilter(), search: 'F(X)' })).toHaveLength(1)
+  })
+
+  it('正则模式与非法正则回退', () => {
+    expect(applyFilter([q], { ...defaultFilter(), search: 'P\\d+-\\d+', searchRegex: true })).toHaveLength(1)
+    expect(applyFilter([q], { ...defaultFilter(), search: '第.章', searchRegex: true })).toHaveLength(1)
+    expect(applyFilter([q], { ...defaultFilter(), search: '第.+章', searchRegex: true })).toHaveLength(1)
+
+    expect(applyFilter([q], { ...defaultFilter(), search: 'f(x', searchRegex: true })).toHaveLength(1)
+  })
+
+  it('空搜索不过滤', () => {
+    expect(applyFilter([q], { ...defaultFilter(), search: '  ' })).toHaveLength(1)
   })
 })

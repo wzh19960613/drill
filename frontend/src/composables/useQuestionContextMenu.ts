@@ -14,41 +14,57 @@ export interface UseQuestionContextMenuOptions {
   answerVisible: () => boolean
 }
 
+interface CtxState {
+  show: boolean
+  x: number
+  y: number
+  items: CtxItem[]
+}
+
+function menuItemsOf(
+  opts: UseQuestionContextMenuOptions,
+  katexEl: HTMLElement | null,
+  zone: HTMLElement | null,
+): CtxItem[] {
+  const items: CtxItem[] = []
+  if (katexEl) {
+    const ann = katexEl.querySelector('annotation[encoding="application/x-tex"]')
+    const tex = ann?.textContent?.trim() ?? ''
+    if (tex) items.push({ label: '复制 LaTeX', run: () => void copyText(tex) })
+  }
+  if (zone) {
+    items.push({ label: '复制题目', run: () => void copyText(questionMarkdown(opts.q())) })
+    if (opts.answerVisible()) {
+      items.push({ label: '复制答案', run: () => void copyQuestionPart(opts.q(), 'answer') })
+      items.push({ label: '复制所有', run: () => void copyQuestionPart(opts.q(), 'full') })
+    }
+  }
+  return items
+}
+
+function onContextOf(
+  opts: UseQuestionContextMenuOptions,
+  ctx: CtxState,
+  markTarget: (el: HTMLElement | null) => void,
+  e: MouseEvent,
+) {
+  const target = e.target as HTMLElement
+  const katexEl = target.closest('.katex, .q-math') as HTMLElement | null
+  const zone = target.closest('.q-stem, .q-options, .q-answer') as HTMLElement | null
+  if (!katexEl && !zone) return
+  e.preventDefault()
+  window.getSelection()?.removeAllRanges()
+  const items = menuItemsOf(opts, katexEl, zone)
+  if (!items.length) return
+  markTarget(katexEl)
+  ctx.items = items
+  ctx.x = e.clientX
+  ctx.y = e.clientY
+  ctx.show = true
+}
+
 export function useQuestionContextMenu(opts: UseQuestionContextMenuOptions) {
-  const ctx = reactive({ show: false, x: 0, y: 0, items: [] as CtxItem[] })
-
-  function menuItems(katexEl: HTMLElement | null, zone: HTMLElement | null): CtxItem[] {
-    const items: CtxItem[] = []
-    if (katexEl) {
-      const ann = katexEl.querySelector('annotation[encoding="application/x-tex"]')
-      const tex = ann?.textContent?.trim() ?? ''
-      if (tex) items.push({ label: '复制 LaTeX', run: () => void copyText(tex) })
-    }
-    if (zone) {
-      items.push({ label: '复制题目', run: () => void copyText(questionMarkdown(opts.q())) })
-      if (opts.answerVisible()) {
-        items.push({ label: '复制答案', run: () => void copyQuestionPart(opts.q(), 'answer') })
-        items.push({ label: '复制所有', run: () => void copyQuestionPart(opts.q(), 'full') })
-      }
-    }
-    return items
-  }
-
-  function onContext(e: MouseEvent) {
-    const target = e.target as HTMLElement
-    const katexEl = target.closest('.katex, .q-math') as HTMLElement | null
-    const zone = target.closest('.q-stem, .q-options, .q-answer') as HTMLElement | null
-    if (!katexEl && !zone) return // keep the native browser menu elsewhere
-    e.preventDefault()
-    window.getSelection()?.removeAllRanges()
-    const items = menuItems(katexEl, zone)
-    if (!items.length) return
-    markTarget(katexEl)
-    ctx.items = items
-    ctx.x = e.clientX
-    ctx.y = e.clientY
-    ctx.show = true
-  }
+  const ctx = reactive<CtxState>({ show: false, x: 0, y: 0, items: [] })
 
   let lastTarget: HTMLElement | null = null
 
@@ -62,6 +78,8 @@ export function useQuestionContextMenu(opts: UseQuestionContextMenuOptions) {
     ctx.show = false
     markTarget(null)
   }
+
+  const onContext = (e: MouseEvent) => onContextOf(opts, ctx, markTarget, e)
 
   function onWinMouseDown(e: MouseEvent) {
     if (!(e.target as HTMLElement).closest('.mpop')) closeCtx()

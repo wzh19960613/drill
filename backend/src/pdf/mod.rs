@@ -1,5 +1,3 @@
-//! Content, option shuffling and layout mirror the browser print page.
-
 mod document;
 mod fonts;
 mod jsslots;
@@ -8,6 +6,8 @@ mod layout;
 mod markup;
 mod payload;
 pub mod svg;
+#[cfg(test)]
+mod tests;
 
 use std::sync::{Arc, LazyLock};
 
@@ -44,8 +44,6 @@ pub fn render(payload: &ExportPayload, source_dirs: &[std::path::PathBuf]) -> Re
     typst_pdf::pdf(&doc, &Default::default()).map_err(|e| anyhow!("typst pdf export failed: {e:?}"))
 }
 
-/// Measure one height per question, falling back to zero heights (static
-/// per-page grouping) when the measuring document fails.
 fn measure_question_heights(
     payload: &ExportPayload,
     slots: &document::ImageSlots,
@@ -78,11 +76,7 @@ fn measure_question_heights(
     }
 }
 
-/// Compile one generated source with a unique virtual path. The virtual
-/// source is removed from the registry afterwards so repeated exports do not
-/// leak the full document text.
 fn compile(source: &str, inputs: Dict) -> Result<typst_layout::PagedDocument> {
-    // unique virtual path per compile so parallel exports never clash
     let n = RENDER_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let main_path = format!("exports/gen-{n}/main.typ");
     REGISTRY.set(&main_path, source.to_string());
@@ -107,16 +101,16 @@ pub(crate) fn load_images(
     let mut slots = document::ImageSlots::default();
     let mut inputs = Dict::new();
     for name in names {
-        let Some(svg) = svg::load_svg(name, source_dirs) else {
-            log_warn(&format!("[warn] export svg not found in sources: {name}"));
+        let Some(fmt) = svg::load_image(name, source_dirs) else {
+            log_warn(&format!("[warn] export image not found in sources: {name}"));
             continue;
         };
         let key = format!("img{}", inputs.len());
         inputs.insert(
             key.clone().into(),
-            Value::Bytes(typst::foundations::Bytes::new(svg.as_bytes().to_vec())),
+            Value::Bytes(typst::foundations::Bytes::new(fmt.0)),
         );
-        slots.insert(name.clone(), key);
+        slots.insert(name.clone(), (key, fmt.1.to_string()));
     }
     (slots, inputs)
 }
@@ -140,62 +134,5 @@ pub fn safe_filename(s: &str) -> String {
         "export".into()
     } else {
         out
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use payload::PrintItem;
-
-    fn payload(doc: &str, items: Vec<PrintItem>) -> ExportPayload {
-        serde_json::from_value(serde_json::json!({
-            "doc": doc, "paper": "A4", "perPage": 2,
-            "date": "2026-09-03", "title": "测试题本", "bookId": null,
-            "fontScale": 1, "optsPerRow": 4, "items": items_value(items),
-        }))
-        .unwrap()
-    }
-
-    fn items_value(items: Vec<PrintItem>) -> serde_json::Value {
-        serde_json::to_value(items).unwrap()
-    }
-
-    fn sample_item() -> PrintItem {
-        serde_json::from_value(serde_json::json!({
-            "id": "P29-10", "source": "s1", "subject": "数学", "origin": "示例题库",
-            "locate": "P29-10", "chapter": "第3章 概念", "qtype": "选择题",
-            "stem": ["设 $f(x)=\\begin{cases}x>0\\\\ x\\leqslant 0\\end{cases}$，则（　）。"],
-            "options": [
-                {"id": 1, "text": "不连续"},
-                {"id": 2, "text": "连续，但不可导"},
-                {"id": 3, "text": "可导，但导函数不连续"},
-                {"id": 4, "text": "可导，且导函数连续"}],
-            "correct_id": 4, "correct_ids": [4], "answer_line": "**(D)**。",
-            "solution": ["连续性：$\\lim\\limits_{x\\to0}x^2=0$。"], "notes": [],
-            "seq": 1, "optionOrder": [2, 0, 3, 1]
-        }))
-        .unwrap()
-    }
-
-    #[test]
-    fn safe_filename_keeps_cjk() {
-        assert_eq!(safe_filename("题本/1:*.pdf"), "题本-1---pdf");
-        assert_eq!(safe_filename("///"), "export");
-    }
-
-    #[test]
-    fn renders_workbook_pdf() {
-        let payload = payload("workbook", vec![sample_item()]);
-        let bytes = render(&payload, &[]).expect("render should succeed");
-        assert!(bytes.starts_with(b"%PDF"), "must be a pdf");
-    }
-
-    #[test]
-    fn renders_answers_pdf() {
-        let payload = payload("answers", vec![sample_item()]);
-        let bytes = render(&payload, &[]).expect("render should succeed");
-        assert!(bytes.starts_with(b"%PDF"), "must be a pdf");
     }
 }

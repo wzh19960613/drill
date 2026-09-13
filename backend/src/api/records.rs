@@ -17,7 +17,7 @@ pub async fn list(State(app): State<App>) -> Json<Vec<Record>> {
 pub struct NewRecord {
     #[serde(rename = "questionId")]
     question_id: String,
-    /// Id of the source the question belongs to.
+
     source: String,
     correct: bool,
     #[serde(default)]
@@ -116,8 +116,13 @@ mod tests {
             "empty source is rejected"
         );
 
+        created_record_carries_no_stats(&app).await;
+        list_round_trips_the_source(&app).await;
+    }
+
+    async fn created_record_carries_no_stats(app: &App) {
         let resp = post(
-            &app,
+            app,
             json!({ "questionId": "P1-1", "source": "s1", "correct": true, "ms": 900 }),
         )
         .await;
@@ -130,8 +135,9 @@ mod tests {
             v.get("stats").is_none(),
             "stats field removed from the wire"
         );
+    }
 
-        // list round-trips the stored source
+    async fn list_round_trips_the_source(app: &App) {
         let req = Request::builder()
             .uri("/api/records")
             .body(Body::empty())

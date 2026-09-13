@@ -22,7 +22,7 @@ async function refreshActiveBookName() {
   }
 }
 
-/** The active book is remembered per subject; switching swaps the name */
+
 watch(currentSubject, refreshActiveBookName)
 
 const { estimate, typeSummary, total } = useTimeEstimate()

@@ -7,9 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::fsutil::{atomic_write, lock, log_warn};
 
-/// Cache index of the exports/ dir: content hash → export file (with the
-/// owning book id so deletion can clean up derived files). All operations go
-/// through an internal Mutex so concurrent requests never lose updates.
 pub struct ExportCache {
     dir: PathBuf,
     entries: Mutex<BTreeMap<String, CacheEntry>>,
@@ -85,7 +82,6 @@ impl ExportCache {
         self.save(&entries);
     }
 
-    /// Persist a snapshot, pruning entries whose file no longer exists.
     fn save(&self, entries: &BTreeMap<String, CacheEntry>) {
         let mut pruned = entries.clone();
         pruned.retain(|_, e| self.dir.join(&e.file).is_file());
@@ -147,11 +143,10 @@ mod tests {
         fs::write(dir.join("a.pdf"), b"pdf").unwrap();
         let cache = ExportCache::new(dir.clone());
         cache.insert("h1", "a.pdf", Some("b1"));
-        // a fresh instance reloads the persisted index
+
         let reloaded = ExportCache::new(dir.clone());
         assert!(reloaded.lookup("h1").is_some());
 
-        // a corrupted index resets to empty but keeps working
         fs::write(dir.join("cache.json"), "{broken").unwrap();
         let corrupted = ExportCache::new(dir.clone());
         assert!(corrupted.lookup("h1").is_none());

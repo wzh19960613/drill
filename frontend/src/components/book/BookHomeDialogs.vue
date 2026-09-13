@@ -97,8 +97,8 @@ const emit = defineEmits<{
         是否将其设为<b>收藏题本</b>？（刷题时点「收藏」即可加入）
       </p>
       <div class="m-actions">
-        <button class="btn primary" @click="emit('accept-favorite')">是</button>
-        <button class="btn ghost" @click="emit('cancel-favorite')">否</button>
+        <button class="btn primary" @click="emit('accept-favorite')">设为收藏题本</button>
+        <button class="btn ghost" @click="emit('cancel-favorite')">暂不</button>
       </div>
     </div>
   </div>

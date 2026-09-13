@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, ClipboardCheck, Download, Pencil, Play, Trash2 } from 'lucide-vue-next'
+import { Check, ClipboardCheck, Download, Eraser, FolderOpen, Pencil, Play, Trash2 } from 'lucide-vue-next'
 import DialogHeader from '../DialogHeader.vue'
+import ConfirmDialog from '../ConfirmDialog.vue'
 import QuestionList from '../QuestionList.vue'
 import { sessionFromDef } from '../../book'
 import { store } from '../../store'
@@ -19,9 +20,23 @@ const emit = defineEmits<{
   (e: 'open-detail', q: Question): void
   (e: 'rename', name: string): void
   (e: 'set-favorite', def: BookDef): void
+  (e: 'open-sources'): void
+  (e: 'clean-stale'): void
 }>()
 
 const questions = computed(() => sessionFromDef(props.def, store.questions).items)
+
+
+const staleCount = computed(
+  () => props.def.items.length - questions.value.length,
+)
+
+const confirmClean = ref(false)
+
+function confirmCleanStale() {
+  confirmClean.value = false
+  emit('clean-stale')
+}
 
 const renaming = ref(false)
 const renameDraft = ref('')
@@ -72,6 +87,19 @@ async function commitRename() {
           </span>
         </template>
       </DialogHeader>
+      <div v-if="staleCount" class="vm-stale">
+        <div class="vm-stale-text">
+          有 {{ staleCount }} 道题目已失效（题源被移除、文件夹被移动，或题源的「子文件夹」开关被关闭）。恢复题源或重新打开开关后，这些题目会自动回到题本。
+        </div>
+        <div class="vm-stale-actions">
+          <button class="btn sm" @click="emit('open-sources')">
+            <FolderOpen style="width: 0.875rem; height: 0.875rem" /> 题源管理
+          </button>
+          <button class="btn bad sm" @click="confirmClean = true">
+            <Eraser style="width: 0.875rem; height: 0.875rem" /> 清理失效题目
+          </button>
+        </div>
+      </div>
       <QuestionList :questions="questions" mode="view" @open="emit('open-detail', $event)" @study-from="emit('study-from', $event)" />
       <footer class="v-foot">
         <button class="btn primary" @click="emit('start', false)"><Play style="width: 0.9375rem; height: 0.9375rem" /> 开始刷题</button>
@@ -83,6 +111,17 @@ async function commitRename() {
         <button class="btn ghost danger" @click="emit('delete', def)"><Trash2 style="width: 0.9375rem; height: 0.9375rem" /> 删除</button>
       </footer>
     </div>
+
+    <ConfirmDialog
+      v-if="confirmClean"
+      nested
+      width="25rem"
+      confirm-text="清理"
+      @confirm="confirmCleanStale"
+      @cancel="confirmClean = false"
+    >
+      确定从「{{ def.name }}」中移除 {{ staleCount }} 道失效题目？不会删除任何文件；但清理后即使题源恢复，这些题目也不会再回到题本。
+    </ConfirmDialog>
   </div>
   </Teleport>
 </template>
@@ -91,6 +130,24 @@ async function commitRename() {
 .view-modal {
   width: min(62.5rem, 96vw);
   max-height: 88vh;
+}
+
+.vm-stale {
+  flex: none;
+  margin: 0.5rem 1rem 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8438rem;
+  line-height: 1.55;
+  color: var(--bad);
+  background: var(--bad-weak);
+  border-radius: 0.5rem;
+}
+
+.vm-stale-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .v-foot {

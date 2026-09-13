@@ -1,5 +1,14 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { codeIndex, defaultHotkeys, fmtKey, keysOf, loadHotkeys, primaryCode, saveHotkeys } from './hotkeys'
+import {
+  applyAnswerActions,
+  codeIndex,
+  defaultHotkeys,
+  fmtKey,
+  keysOf,
+  loadHotkeys,
+  primaryCode,
+  saveHotkeys,
+} from './hotkeys'
 
 beforeEach(() => {
   localStorage.clear()
@@ -45,10 +54,31 @@ describe('key formatting', () => {
   })
 })
 
+describe('applyAnswerActions', () => {
+  it('toggles with one key bound to both actions', () => {
+    const both = ['showAnswer', 'hideAnswer'] as const
+    expect(applyAnswerActions(false, [...both])).toBe(true)
+    expect(applyAnswerActions(true, [...both])).toBe(false)
+  })
+
+  it('each action is a no-op in its already-active state', () => {
+    expect(applyAnswerActions(true, ['showAnswer'])).toBe(true)
+    expect(applyAnswerActions(false, ['hideAnswer'])).toBe(false)
+  })
+
+  it('non-answer actions leave the state alone', () => {
+    expect(applyAnswerActions(true, ['markRight'])).toBe(true)
+    expect(applyAnswerActions(false, ['next'])).toBe(false)
+  })
+})
+
 describe('codeIndex', () => {
   it('indexes every binding and allows one key to serve multiple actions', () => {
     const idx = codeIndex(defaultHotkeys())
-    expect(idx.get('Space')).toEqual(['showAnswer', 'markRight'])
+    expect(idx.get('Space')).toEqual(['showAnswer', 'hideAnswer'])
+    expect(idx.get('Enter')).toEqual(['markRight'])
+    expect(idx.get('Slash')).toEqual(['markMastered'])
+    expect(idx.get('Backspace')).toEqual(['markMastered'])
     expect(idx.get('ArrowLeft')).toEqual(['prev'])
     expect(idx.get('KeyQ')).toBeUndefined()
   })

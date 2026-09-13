@@ -7,6 +7,8 @@ export interface MenuPopItem {
   icon?: Component
   danger?: boolean
   sep?: boolean
+  /** renders as a toggleable checkbox entry when present */
+  checked?: boolean
 }
 </script>
 
@@ -71,7 +73,12 @@ function pick(item: MenuPopItem) {
       <template v-for="it in items" :key="it.key">
         <div v-if="it.sep" class="mpop-sep"></div>
         <button :class="{ danger: it.danger }" @click="pick(it)">
-          <template v-if="items.some((i) => i.icon)">
+          <span v-if="it.checked !== undefined" class="mpop-check" :class="{ on: it.checked }">
+            <svg v-if="it.checked" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 6 9 17l-5-5" />
+            </svg>
+          </span>
+          <template v-else-if="items.some((i) => i.icon)">
             <component :is="it.icon" v-if="it.icon" style="width: 1rem; height: 1rem" />
             <span v-else class="mpop-ico"></span>
           </template>
@@ -136,6 +143,29 @@ function pick(item: MenuPopItem) {
   flex: none;
   width: 1rem;
   height: 1rem;
+}
+
+.mpop-check {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border: 1.5px solid var(--line);
+  border-radius: 0.3125rem;
+  color: transparent;
+}
+
+.mpop-check.on {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.mpop-check svg {
+  width: 0.75rem;
+  height: 0.75rem;
 }
 
 .mpop-sep {

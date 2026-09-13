@@ -1,9 +1,13 @@
 pub fn paragraphs(lines: &[&str]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     let mut cur: Vec<String> = Vec::new();
+    let mut in_fence = false;
     for l in lines {
         let t = l.trim();
-        if t.is_empty() {
+        if t.starts_with("```") {
+            in_fence = !in_fence;
+            cur.push(t.to_string());
+        } else if t.is_empty() && !in_fence {
             if !cur.is_empty() {
                 out.push(cur.join("\n"));
                 cur.clear();
@@ -79,6 +83,15 @@ mod tests {
     fn paragraphs_split_on_blank_lines() {
         let lines = vec!["a", "b", "", "", "c"];
         assert_eq!(paragraphs(&lines), vec!["a\nb", "c"]);
+    }
+
+    #[test]
+    fn paragraphs_keep_code_fence_together() {
+        let lines = vec!["前文", "", "```rust", "let x = 1;", "", "let y = 2;", "```", "", "后文"];
+        assert_eq!(
+            paragraphs(&lines),
+            vec!["前文", "```rust\nlet x = 1;\n\nlet y = 2;\n```", "后文"]
+        );
     }
 
     #[test]

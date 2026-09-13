@@ -8,25 +8,49 @@ use axum::response::{IntoResponse, Response};
 use super::bad_request;
 use crate::app::App;
 use crate::fsutil::is_safe_component;
+use crate::images::{image_ext, mime_of};
 use crate::pdf::svg::strip_dark_media;
 
 pub async fn asset(State(app): State<App>, AxPath(name): AxPath<String>) -> Response {
-    if !is_safe_component(&name) || !name.ends_with(".svg") {
-        return bad_request("only svg assets are served");
+    if !is_safe_component(&name) || image_ext(&name).is_none() {
+        return bad_request("only svg / png / jpg / jpeg / webp / gif assets are served");
     }
+    let ext = image_ext(&name).unwrap();
     for src in app.sources.list() {
-        if let Ok(svg) = fs::read_to_string(src.path.join(&name)) {
-            return (
-                [
-                    (header::CONTENT_TYPE, "image/svg+xml; charset=utf-8"),
-                    (header::CACHE_CONTROL, "no-cache"),
-                ],
-                strip_dark_media(&svg),
-            )
-                .into_response();
+        if let Some(path) = crate::fsutil::find_recursive(&src.path, &name) {
+            let Ok(bytes) = fs::read(&path) else {
+                continue;
+            };
+            return image_response(ext, bytes);
         }
     }
     (StatusCode::NOT_FOUND, "asset not found").into_response()
+}
+
+pub(super) fn image_response(ext: &str, bytes: Vec<u8>) -> Response {
+    if ext == "svg" {
+        let svg = strip_dark_media(&String::from_utf8_lossy(&bytes));
+        (
+            [
+                (header::CONTENT_TYPE, mime_of(ext)),
+                (header::CACHE_CONTROL, "no-cache"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+                (header::CONTENT_SECURITY_POLICY, "sandbox"),
+            ],
+            svg,
+        )
+            .into_response()
+    } else {
+        (
+            [
+                (header::CONTENT_TYPE, mime_of(ext)),
+                (header::CACHE_CONTROL, "no-cache"),
+                (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            ],
+            bytes,
+        )
+            .into_response()
+    }
 }
 
 pub async fn static_route(State(app): State<App>, uri: Uri) -> Response {
@@ -43,9 +67,7 @@ pub async fn static_route(State(app): State<App>, uri: Uri) -> Response {
         if f.is_file() {
             return serve_file(&f);
         }
-        // Stale installed PWAs may hold a heuristic-cached index.html that
-        // references deleted asset files; serve a self-healing payload
-        // instead: the JS navigates to a cache-busted root URL.
+
         if rel.starts_with("assets/") {
             return stale_asset(rel);
         }
@@ -95,8 +117,7 @@ fn serve_file(p: &Path) -> Response {
         "txt" => "text/plain; charset=utf-8",
         _ => "application/octet-stream",
     };
-    // the entry html must revalidate (heuristic caching would serve stale
-    // asset references); hashed build assets are immutable
+
     let in_assets = p.components().any(|c| c.as_os_str() == "assets");
     let cache = if in_assets && matches!(ext, "js" | "mjs" | "css" | "woff2" | "woff" | "ttf") {
         "public, max-age=31536000, immutable"

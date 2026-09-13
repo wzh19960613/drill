@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import DialogHeader from './DialogHeader.vue'
+import QuestionDetail from './QuestionDetail.vue'
 import { loadAll, selection, store, subjectQuestions } from '../store'
 import { defaultFilter, type Filter } from '../filter'
+import type { Question } from '../types'
 import { invertSelection } from '../qutil'
 import {
   askUseAsCurrent,
@@ -32,11 +34,12 @@ const filter = ref<Filter>(defaultFilter())
 const checkedIds = ref<string[]>([])
 const bookName = ref('')
 const exportOpen = ref(false)
+const viewQ = ref<Question | null>(null)
 
 const { sort, shuffleO, seed, filteredQuestions, loadCfg, persistCfg, dice } = useBookNewDraft(filter)
 
 useDialogShell((e) => {
-  if (exportOpen.value) return
+  if (exportOpen.value || viewQ.value) return
   const t = e.target as HTMLElement | null
   if (t && ['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName)) return
   if (e.code === 'Escape') {
@@ -72,6 +75,13 @@ function selectAllFiltered() {
 
 function invert() {
   checkedIds.value = invertSelection(filteredQuestions.value, checkedIds.value)
+}
+
+function toggleSelect(q: Question, on: boolean) {
+  const s = new Set(checkedIds.value)
+  if (on) s.add(q.id)
+  else s.delete(q.id)
+  checkedIds.value = [...s]
 }
 
 function makeSession() {
@@ -132,7 +142,12 @@ function openExport() {
           </section>
           <BookNewSortBar v-model:sort="sort" v-model:seed="seed" @dice="dice" />
 
-          <QuestionList v-model="checkedIds" :questions="filteredQuestions" :flat="sort === 'random'" />
+          <QuestionList
+            v-model="checkedIds"
+            :questions="filteredQuestions"
+            :flat="sort === 'random'"
+            @open="viewQ = $event"
+          />
 
           <BookNewConfigPanel
             v-model:book-name="bookName"
@@ -153,6 +168,18 @@ function openExport() {
       </div>
 
       <ExportDialog v-if="exportOpen && currentSession" :session="currentSession" @close="exportOpen = false" />
+
+      <QuestionDetail
+        v-if="viewQ"
+        :key="viewQ.id"
+        :q="viewQ"
+        :siblings="filteredQuestions"
+        select-mode
+        :selected="checkedIds.includes(viewQ.id)"
+        @toggle-select="toggleSelect"
+        @navigate="viewQ = $event"
+        @close="viewQ = null"
+      />
     </div>
   </div>
   </Teleport>
@@ -186,7 +213,7 @@ function openExport() {
    no longer a scroll container — vertical sticky returns to body scrolling,
    chapter headers stick to the body top (same as the bank page wide screens) */
 @container (min-width: 62.5rem) {
-  .bn > .ql {
+  .bn > .ql:not(.x-overflow) {
     overflow: visible;
   }
 }

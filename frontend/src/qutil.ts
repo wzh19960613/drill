@@ -38,7 +38,6 @@ export function remapIds(q: QCore, order: number[] | null | undefined): number[]
     .sort((a, b) => a - b)
 }
 
-/** Question excerpt (LaTeX rendered, overflow truncated by CSS). */
 export function stemExcerptHtml(q: QCore): string {
   const paras = q.stem.filter((p) => !/^!\[\[/.test(p.trim())).slice(0, 3)
   return richTextSingle(paras.join(' '))
@@ -54,7 +53,7 @@ export function questionMarkdown(q: QCore): string {
 
 export function answerMarkdown(q: QCore): string {
   const parts: string[] = []
-  if (q.answer_line) parts.push(`**答案**：${q.answer_line}`)
+  if (q.answer?.length) parts.push(`**答案**：${q.answer.join('；')}`)
   for (const block of [q.solution, q.notes]) {
     if (!block?.length) continue
     if (parts.length) parts.push('')
@@ -63,7 +62,6 @@ export function answerMarkdown(q: QCore): string {
   return parts.join('\n\n')
 }
 
-/** Invert the checked items among the shown list, keeping off-screen checks */
 export function invertSelection(shown: { id: string }[], checkedIds: string[]): string[] {
   const shownIds = new Set(shown.map((q) => q.id))
   const checked = new Set(checkedIds)

@@ -3,22 +3,38 @@ use std::sync::OnceLock;
 
 use regex::Regex;
 
-use crate::fsutil::is_safe_component;
+use crate::fsutil::{find_recursive, is_safe_component};
 
-pub fn load_svg(name: &str, source_dirs: &[std::path::PathBuf]) -> Option<String> {
-    if !is_safe_asset_name(name) {
+pub fn load_image(
+    name: &str,
+    source_dirs: &[std::path::PathBuf],
+) -> Option<(Vec<u8>, &'static str)> {
+    let fmt = crate::images::image_ext(name)?;
+    if !is_safe_component(name) {
         return None;
     }
     for dir in source_dirs {
-        if let Ok(svg) = fs::read_to_string(dir.join(name)) {
-            return Some(strip_dark_media(&svg));
+        if let Some(path) = find_recursive(dir, name) {
+            if let Ok(bytes) = fs::read(&path) {
+
+                if !crate::images::magic_matches(fmt, &bytes) {
+                    crate::fsutil::log_warn(&format!(
+                        "[warn] image {} fails the content sniff, skipping it",
+                        path.display()
+                    ));
+                    continue;
+                }
+                if fmt == "svg" {
+                    let svg = strip_dark_media(&String::from_utf8_lossy(&bytes));
+                    return Some((svg.into_bytes(), "svg"));
+                }
+                return Some((bytes, fmt));
+            }
         }
     }
     None
 }
 
-/// Strip dark-mode media queries: the print output is always light, so dark
-/// styles would otherwise invert the printed strokes.
 pub fn strip_dark_media(svg: &str) -> String {
     static RE: OnceLock<Regex> = OnceLock::new();
     let re = RE.get_or_init(|| {
@@ -28,10 +44,6 @@ pub fn strip_dark_media(svg: &str) -> String {
         .unwrap()
     });
     re.replace_all(svg, "").into_owned()
-}
-
-pub fn is_safe_asset_name(name: &str) -> bool {
-    is_safe_component(name) && name.ends_with(".svg")
 }
 
 #[cfg(test)]
@@ -57,12 +69,34 @@ mod tests {
     }
 
     #[test]
-    fn rejects_unsafe_names() {
-        assert!(is_safe_asset_name("P40-5图.svg"));
-        assert!(!is_safe_asset_name("../secret.svg"));
-        assert!(!is_safe_asset_name("a/b.svg"));
-        assert!(!is_safe_asset_name(".hidden.svg"), "dotfiles rejected");
-        assert!(!is_safe_asset_name("photo.png"));
-        assert!(!is_safe_asset_name(""));
+    fn loads_raster_and_strips_svg_for_typst() {
+        let dir = std::env::temp_dir().join(format!("drill-pdfimg-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("nested")).unwrap();
+        std::fs::write(
+            dir.join("图.svg"),
+            "<svg>@media (prefers-color-scheme: dark) {}</svg>",
+        )
+        .unwrap();
+        let mut png = vec![0x89, b'P', b'N', b'G', b'\r', b'\n', 0x1a, b'\n'];
+        png.extend_from_slice(b"rest");
+        std::fs::write(dir.join("nested/shot.png"), &png).unwrap();
+
+        let dirs = vec![dir.clone()];
+        let (bytes, fmt) = load_image("图.svg", &dirs).unwrap();
+        assert_eq!(fmt, "svg");
+        assert!(!String::from_utf8_lossy(&bytes).contains("prefers-color-scheme"));
+
+        let (bytes, fmt) = load_image("shot.png", &dirs).unwrap();
+        assert_eq!(fmt, "png");
+        assert_eq!(bytes, png);
+
+        assert!(load_image("../escape.png", &dirs).is_none());
+        assert!(load_image("missing.png", &dirs).is_none());
+        assert!(load_image("doc.pdf", &dirs).is_none());
+
+        std::fs::write(dir.join("bad.png"), b"not a png at all").unwrap();
+        assert!(load_image("bad.png", &dirs).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -26,7 +26,32 @@ fn add_relocate_remove() {
     assert_eq!(moved.id, "s1");
     assert_eq!(store.get("s1").unwrap().path, b.canonicalize().unwrap());
     assert!(store.remove("nope").is_err());
-    assert!(store.remove(&s1.id).is_err(), "last source must be kept");
+    store.remove(&s1.id).unwrap();
+    assert!(store.list().is_empty(), "the last source can be removed");
+}
+
+#[test]
+fn recursive_flag_round_trips_and_defaults_off() {
+    let root = tmpdir("recursive");
+    let a = root.join("bank-a");
+    fs::create_dir_all(&a).unwrap();
+    let file = root.join("sources.json");
+    let store = SourceStore::load(file.clone(), None);
+
+    let s1 = store.add(a.to_str().unwrap(), &root).unwrap();
+    assert!(!s1.recursive, "default is root-only");
+
+    store.set_recursive(&s1.id, true).unwrap();
+    assert!(store.get(&s1.id).unwrap().recursive);
+    store.set_recursive(&s1.id, false).unwrap();
+    assert!(!store.get(&s1.id).unwrap().recursive);
+    assert!(store.set_recursive("nope", true).is_err());
+
+    store.set_recursive(&s1.id, true).unwrap();
+    let reloaded = SourceStore::load(file, None);
+    assert!(reloaded.get(&s1.id).unwrap().recursive);
+
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]
@@ -41,7 +66,6 @@ fn load_with_existing_sources_does_not_rewrite_the_file() {
     let before = fs::metadata(&file).unwrap().modified().unwrap();
     let raw_before = fs::read_to_string(&file).unwrap();
 
-    // a plain reload changes nothing and must leave the file untouched
     let _ = SourceStore::load(file.clone(), None);
     let raw_after = fs::read_to_string(&file).unwrap();
     assert_eq!(
@@ -77,22 +101,18 @@ fn corrupted_sources_file_resets_and_still_works() {
 #[test]
 fn explicit_root_seeds_itself_no_root_seeds_nothing() {
     let root = tmpdir("seed");
-    // no explicit root (running from source): nothing is seeded
+
     let store = SourceStore::load(root.join("sources.json"), None);
     assert!(store.list().is_empty());
 
-    // explicit root: the directory itself becomes the default source
     let store = SourceStore::load(root.join("sources.json"), Some(&root));
     let list = store.list();
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].path, root.canonicalize().unwrap());
 
-    // an existing source list is never re-seeded
     let store = SourceStore::load(root.join("sources.json"), Some(&root));
     assert_eq!(store.list().len(), 1);
 
-    // a root that does not exist seeds nothing (release packages with a
-    // stale default path start empty instead of registering a dead dir)
     let missing = root.join("missing");
     let store = SourceStore::load(root.join("sources2.json"), Some(&missing));
     assert!(store.list().is_empty());

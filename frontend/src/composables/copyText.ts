@@ -4,14 +4,12 @@ import type { QCore } from '../types'
 import { answerMarkdown, questionMarkdown } from '../qutil'
 import type { MenuPopItem } from '../components/MenuPop.vue'
 
-/** Shared "copy stem / answer / everything" menu entries (keys are CopyKind) */
 export const COPY_MENU_ITEMS: MenuPopItem[] = [
   { key: 'stem', label: '复制题目', icon: ClipboardCopy },
   { key: 'answer', label: '复制答案' },
   { key: 'full', label: '复制所有' },
 ]
 
-/** Clipboard write with an execCommand fallback (non-secure contexts) */
 export async function copyText(t: string) {
   try {
     await navigator.clipboard.writeText(t)

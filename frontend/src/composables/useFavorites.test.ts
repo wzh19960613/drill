@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-/**
- * State-machine tests for useFavorites (api layer mocked, pure frontend
- * logic): favorite-book creation/reuse, self-healing after deletion, state
- * resync after switching.
- */
-
 const booksStore = new Map<string, any>()
 let favoriteId: string | null = null
 
@@ -36,7 +30,6 @@ function seedBook(id: string, name: string, items: string[] = []) {
   })
 }
 
-/** The module holds singleton state: each case resets the module for a clean copy */
 async function freshFavs() {
   const mod = await import('./useFavorites')
   useFavorites = mod.useFavorites
@@ -68,17 +61,16 @@ describe('ensureFavoriteBook', () => {
     const id = await favs.ensureFavoriteBook()
     expect(id).toBe('old')
     expect([...booksStore.values()].filter((b) => b.name === FAVORITE_BOOK_NAME)).toHaveLength(1)
-    // After reuse the state set resyncs: old favorites show as favorited
+
     expect(favs.isFavorited('P9')).toBe(true)
   })
 
   it('recovers when the pointed-to book was deleted elsewhere', async () => {
     seedBook('gone', FAVORITE_BOOK_NAME, ['P1'])
-    favoriteId = 'gone' // 已设置但书随后被删
+    favoriteId = 'gone'
     booksStore.clear()
     const favs = await freshFavs()
-    // Stale state pointing at a deleted book: favoriting self-heals —
-    // rebuild/reuse and write successfully
+
     await favs.toggleQuestion({ id: 'P2' }, true)
     expect(favoriteId).not.toBe('gone')
     const book = booksStore.get(favoriteId!)
@@ -105,14 +97,13 @@ describe('toggleQuestion', () => {
     const favs = await freshFavs()
     await favs.toggleQuestion({ id: 'P1' }, false)
     expect(favoriteId).toBeNull()
-    expect([...booksStore.values()]).toHaveLength(1) // 没有新书
+    expect([...booksStore.values()]).toHaveLength(1)
     expect(favs.isFavorited('P1')).toBe(false)
   })
 
   it('un-favoriting is a no-op after the book was deleted (backend cleared the pointer)', async () => {
     seedBook('bk1', '第一批题本', ['P1'])
-    // Book deletion already cleared the backend pointer and the frontend
-    // synced: state is clean
+
     const favs = await freshFavs()
     await favs.toggleQuestion({ id: 'P1' }, false)
     expect(favoriteId).toBeNull()

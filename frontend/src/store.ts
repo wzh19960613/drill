@@ -20,8 +20,6 @@ watch(currentSubject, (v) => writeString(StorageKeys.subject, v))
 
 export const UNKNOWN = '未知'
 
-/** Question identity for stats/mastery lookups: cross-source keying needs the
- *  source (question ids are only unique within one source) */
 export interface QuestionLike {
   id: string
   source?: string
@@ -29,12 +27,10 @@ export interface QuestionLike {
 
 const NUL = '\u0000'
 
-/** Composite record/stats key: source + NUL + question id */
 export function questionKey(q: QuestionLike): string {
   return `${q.source ?? ''}${NUL}${q.id}`
 }
 
-/** Mastery entries are opaque strings on the backend; we store source:id */
 function masteryKey(q: QuestionLike): string {
   return q.source ? `${q.source}:${q.id}` : q.id
 }
@@ -83,7 +79,6 @@ export const questionById = computed(() => {
   return m
 })
 
-/** Same bank indexed by the cross-source composite key (for book items) */
 export const questionByKey = computed(() => {
   const m = new Map<string, Question>()
   for (const q of store.questions) m.set(questionKey(q), q)
@@ -132,7 +127,6 @@ export function recentAcc5(q: QuestionLike): { total: number; correct: number } 
   return { total: last.length, correct: last.filter((r) => r.correct).length }
 }
 
-/** Accuracy over the last five attempts as a percentage (0 when unanswered) */
 export function acc5Percent(q: QuestionLike): number {
   const { total, correct } = recentAcc5(q)
   return total ? Math.round((correct / total) * 100) : 0
@@ -167,7 +161,7 @@ function startLoad(): Promise<void> {
 export async function loadAll(force = false): Promise<void> {
   if (store.loaded && !force) return
   if (loadingPromise && !force) return loadingPromise
-  // force while a load is in flight: wait for it, then refetch fresh data
+
   if (loadingPromise) await loadingPromise
   return startLoad()
 }
@@ -200,7 +194,7 @@ export async function updateRecord(id: number, correct: boolean, ms?: number) {
   await api.updateRecord(id, correct, ms1)
   if (rec) {
     rec.correct = correct
-    // keep the previous local duration when the caller passes none
+
     if (ms1 !== undefined) rec.ms = ms1
   }
 }

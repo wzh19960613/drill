@@ -91,6 +91,34 @@ function clearAll() {
       </div>
     </div>
 
+    <div class="fb-search">
+      <span class="fb-search-box">
+        <input
+          :value="modelValue.search ?? ''"
+          type="text"
+          placeholder="搜索：文件名、元数据或内容…"
+          aria-label="搜索题目"
+          @input="patch({ search: ($event.target as HTMLInputElement).value })"
+        />
+        <button
+          v-if="(modelValue.search ?? '').length"
+          class="fb-clear"
+          aria-label="清空搜索"
+          @click="patch({ search: '' })"
+        >
+          <X style="width: 0.9375rem; height: 0.9375rem" />
+        </button>
+      </span>
+      <button
+        class="chip-btn"
+        :class="{ on: modelValue.searchRegex }"
+        :title="modelValue.searchRegex ? '搜索按正则表达式匹配' : '搜索按普通文本匹配'"
+        @click="patch({ searchRegex: !modelValue.searchRegex })"
+      >
+        正则
+      </button>
+    </div>
+
     <div v-if="modelValue.conds.length" class="fb-conds">
       <span
         v-for="c in modelValue.conds"
@@ -121,6 +149,52 @@ function clearAll() {
   align-items: center;
   gap: 0.625rem;
   flex-wrap: wrap;
+}
+
+.fb-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.fb-search-box {
+  position: relative;
+  flex: 1;
+  display: flex;
+}
+
+.fb-search-box input {
+  flex: 1;
+  min-height: 2.625rem;
+  font-size: 0.9375rem;
+  border-radius: var(--radius-pill);
+  padding-inline: 1rem 2.75rem;
+}
+
+.fb-clear {
+  position: absolute;
+  right: 0.375rem;
+  top: 50%;
+  translate: 0 -50%;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.fb-clear:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.fb-search .chip-btn {
+  min-height: 2.625rem;
 }
 
 .fb-tools {

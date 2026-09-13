@@ -6,10 +6,6 @@ use crate::store::{BookStore, SourceStore};
 
 const DEMO_ID: &str = "demo";
 
-/// Example bank embedded at compile time and materialized into the data
-/// directory on first run: user edits land on the private copy instead of
-/// the repository, and a distributed binary ships the demo without the
-/// source tree.
 const EXAMPLE_FILES: &[(&str, &str)] = &[
     ("E1.md", include_str!("../example/E1.md")),
     ("E2.md", include_str!("../example/E2.md")),
@@ -26,18 +22,11 @@ const EXAMPLE_FILES: &[(&str, &str)] = &[
     ),
 ];
 
-/// Seed the example bank and a demo book on first run. The bank is copied
-/// from the embedded files into `example_dir`, a fresh directory inside the
-/// data dir. Idempotent: skips when the demo book already exists or the
-/// example directory is already registered as a source (the default source
-/// seeded by SourceStore does not block the demo), and never overwrites
-/// files already on disk, so a re-seed never clobbers user edits.
 pub fn seed_if_empty(sources: &SourceStore, books: &BookStore, example_dir: &Path) {
     if books.list().iter().any(|b| b.id == DEMO_ID) {
         return;
     }
-    // the already-registered guard must run before materialization: a
-    // directory that is already a source must never be rewritten
+
     if let Ok(path) = example_dir.canonicalize() {
         if sources.list().iter().any(|s| s.path == path) {
             return;
@@ -46,19 +35,26 @@ pub fn seed_if_empty(sources: &SourceStore, books: &BookStore, example_dir: &Pat
     if materialize(example_dir).is_err() {
         return;
     }
-    // add() rejects a path that is already a source, which doubles as the
-    // "already seeded" guard
+
     let Ok(src) = sources.add(&example_dir.to_string_lossy(), example_dir) else {
         return;
     };
-    let items: Vec<BookItemDef> = parsing::load_questions_from(&src.path, &src.id)
+    seed_demo_book(books, &src);
+}
+
+fn demo_items(src: &crate::store::Source) -> Vec<BookItemDef> {
+    parsing::load_questions_from(&src.path, &src.id, src.recursive, &std::collections::HashSet::new())
         .into_iter()
         .map(|q| BookItemDef {
             id: q.id,
             source: q.source,
             option_order: None,
         })
-        .collect();
+        .collect()
+}
+
+fn seed_demo_book(books: &BookStore, src: &crate::store::Source) {
+    let items = demo_items(src);
     if items.is_empty() {
         return;
     }
@@ -75,7 +71,6 @@ pub fn seed_if_empty(sources: &SourceStore, books: &BookStore, example_dir: &Pat
     }
 }
 
-/// Write the embedded example files, skipping any that already exist.
 fn materialize(dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(dir)?;
     for (name, content) in EXAMPLE_FILES {
@@ -157,9 +152,7 @@ mod tests {
 
     #[test]
     fn seeds_even_when_the_default_source_already_exists() {
-        // production layout: with DRILL_ROOT set, SourceStore::load seeds the
-        // root itself as the default source, which used to block the demo
-        // book entirely
+
         let dir = std::env::temp_dir().join(format!("drill-demo-default-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -200,8 +193,7 @@ mod tests {
 
     #[test]
     fn materialize_never_overwrites_existing_files() {
-        // sources.json lost but the materialized copy survived: re-seeding
-        // must fill in gaps without clobbering user edits
+
         let dir = std::env::temp_dir().join(format!("drill-demo-keep-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let example = dir.join("example");
@@ -235,8 +227,6 @@ mod tests {
         seed_if_empty(&sources, &books, &example);
         std::fs::remove_file(example.join("E2.md")).unwrap();
 
-        // simulate a restart: stores reload from disk and the example copy
-        // is already a registered source
         let sources = SourceStore::load(dir.join("sources.json"), None);
         let books = BookStore::load(dir.join("books.json"));
         seed_if_empty(&sources, &books, &example);

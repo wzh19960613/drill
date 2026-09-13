@@ -7,8 +7,7 @@ const props = withDefaults(
     confirmText?: string
     busy?: boolean
     width?: string
-    /** Rendered inside another open dialog: skip Esc/scroll-lock (the parent
-     *  dialog owns both) and stack above the base modal layer */
+    
     nested?: boolean
   }>(),
   { title: '', confirmText: '删除', busy: false, width: '25rem', nested: false },

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { ChevronDown } from 'lucide-vue-next'
 import type { QCore } from '../types'
 import { chapterOf, subjectOf } from '../store'
-import { paraHtml, richText } from '../math'
+import { displayLength, paraHtml, richText } from '../math'
 import {
   answerIds,
   displayOptions,
@@ -13,6 +13,7 @@ import {
 import ContextMenu from './question/ContextMenu.vue'
 import { useQuestionContextMenu } from '../composables/useQuestionContextMenu'
 import { useMathFit } from '../composables/useMathFit'
+import { openImageViewer } from '../composables/useImageViewer'
 
 const props = withDefaults(
   defineProps<{
@@ -26,7 +27,7 @@ const props = withDefaults(
   { optionOrder: null, showAnswer: false, showMeta: true, hideOptions: false, foldAnswer: false },
 )
 
-const ansOpen = ref(false)
+const ansOpen = defineModel<boolean>('answerOpen', { default: false })
 watch(
   () => props.q.id,
   () => (ansOpen.value = false),
@@ -43,6 +44,18 @@ const metaTitle = computed(() =>
     .filter(Boolean)
     .join(' · '),
 )
+
+
+const headId = computed(() => {
+  const q = props.q
+  if (q.locate) return q.locate
+  return metaTags.value ? '' : (q.file || q.id)
+})
+
+function onImageClick(e: MouseEvent) {
+  const img = (e.target as HTMLElement).closest?.('img.q-svg')
+  if (img) openImageViewer((img as HTMLImageElement).getAttribute('src') ?? '', img)
+}
 
 function stripTrailingPeriod(html: string): string {
   return html.replace(/(?:。|\.)\s*$/, '')
@@ -61,7 +74,33 @@ const answerHtml = computed(() => {
       return `<strong class="ans-letter">${ids.map((i) => letterOf(i)).join('')}</strong>`
     }
   }
-  return stripTrailingPeriod(richText(q.answer_line))
+  return stripTrailingPeriod(richText(q.answer?.[0] ?? ''))
+})
+
+
+const answerRest = computed(() => (props.q.answer ?? []).slice(1))
+
+
+function isBlockish(p: string): boolean {
+  return /^(\s*)([-*+]\s|\d+[.)、]\s|```|\|)/.test(p)
+}
+
+/** Answers render as the big centered pill only when they are one simple
+ *  single-line paragraph (or a choice letter line); anything multi-line,
+ *  multi-paragraph or block-level renders as normal left-aligned blocks. */
+const answerAsPill = computed(() => {
+  const q = props.q
+  if (isChoice.value) return true
+  const first = q.answer?.[0] ?? ''
+  return (
+    (q.answer?.length ?? 0) === 1 &&
+    !first.includes('\n') &&
+    !isBlockish(first) &&
+    !first.startsWith('>') &&
+    !first.startsWith('$$') &&
+    !first.includes('![[') &&
+    displayLength(first) < 20
+  )
 })
 
 /** Labeled paragraph blocks rendered under the answer line (解析 / 备注) */
@@ -83,9 +122,9 @@ useMathFit(rootEl)
 </script>
 
 <template>
-  <div ref="rootEl" class="q-view">
+  <div ref="rootEl" class="q-view" @click="onImageClick">
     <div v-if="showMeta" class="q-meta">
-      <span class="qid">{{ q.locate || '未知' }}</span>
+      <span v-if="headId" class="qid">{{ headId }}</span>
       <span class="q-tags" :title="metaTitle">{{ metaTags }}</span>
     </div>
 
@@ -108,9 +147,17 @@ useMathFit(rootEl)
         <span class="fold-hint">{{ ansOpen ? '收起' : '展开' }}</span>
       </button>
       <div v-if="showAnswer && (!foldAnswer || ansOpen)" class="ans-wrap">
-        <template v-if="q.answer_line">
+        <template v-if="q.answer?.length">
           <div class="ans-label">答案</div>
-          <div class="ans-line" v-html="answerHtml"></div>
+          <template v-if="answerAsPill">
+            <div class="ans-line" :class="{ multi: answerRest.length > 0 }" v-html="answerHtml"></div>
+            <div v-if="answerRest.length" class="ans-rest">
+              <div v-for="(p, i) in answerRest" :key="i" v-html="paraHtml(p)"></div>
+            </div>
+          </template>
+          <div v-else class="ans-multi">
+            <div v-for="(p, i) in q.answer" :key="i" v-html="paraHtml(p)"></div>
+          </div>
         </template>
         <template v-for="sec in answerSections" :key="sec.label">
           <div class="ans-label">{{ sec.label }}</div>
@@ -234,6 +281,46 @@ useMathFit(rootEl)
   padding: 0.625rem 0.875rem;
   text-align: center;
   margin-bottom: 0.625rem;
+}
+
+/* 选择题带补充段落：胶囊缩小为常规字号 */
+.ans-line.multi {
+  font-size: 0.9375rem;
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+}
+
+/* 非单行答案：整块浅底、字号略大，常规居左（含列表/表格等） */
+.ans-multi {
+  margin: 0 0 0.625rem;
+  padding: 0.5rem 0.875rem;
+  background: var(--brand-weak);
+  border-radius: 0.75rem;
+  font-size: 1.0625rem;
+  line-height: 1.8;
+}
+
+.ans-multi :deep(p) {
+  margin: 0 0 0.375rem;
+}
+
+.ans-multi :deep(p:last-child),
+.ans-multi > :deep(*:last-child) {
+  margin-bottom: 0;
+}
+
+/* 选择题的答案行 + 补充段落：补充段落同样给底色 */
+.ans-rest {
+  background: var(--brand-weak);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.875rem;
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  margin: 0 0 0.625rem;
+}
+
+.ans-rest :deep(p) {
+  margin: 0 0 0.375rem;
 }
 
 .ans-line :deep(.ans-letter) {

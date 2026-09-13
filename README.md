@@ -61,6 +61,7 @@ Environment variables (all optional):
 | `DRILL_ROOT` | repo root       | Bank root; when set, it is registered as the default source on first run          |
 | `DRILL_DATA` | `backend/data`  | Data directory: attempt records, books, sources, mastery marks, export cache     |
 | `DRILL_DIST` | `frontend/dist` | Static frontend directory served by the backend                                  |
+| `DRILL_MAX_UPLOAD_MB` | `20`            | Editor image upload cap (MB), 1–200                                              |
 
 ## PWA
 

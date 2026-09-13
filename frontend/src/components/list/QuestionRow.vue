@@ -32,8 +32,8 @@ const sigBars = computed(() => {
 <template>
   <div
     class="ql-row"
-    :class="{ checked, clickable: mode !== 'select', 'x-overflow': overflow }"
-    @click="mode !== 'select' && emit('open', q)"
+    :class="{ checked, clickable: true, 'x-overflow': overflow }"
+    @click="emit('open', q)"
   >
     <label v-if="mode !== 'view'" class="ql-check" @click.stop>
       <input
@@ -43,7 +43,7 @@ const sigBars = computed(() => {
       />
     </label>
     <span v-if="mode === 'view'" class="qseq num">{{ seq }}.</span>
-    <span class="qid">{{ q.id }}</span>
+    <span class="qid" :title="q.id">{{ q.id }}</span>
     <span v-if="isMastered(q)" class="chip good">已熟练</span>
     <span class="excerpt" v-html="stemExcerptHtml(q)"></span>
     <span class="row-stats">
@@ -123,7 +123,17 @@ const sigBars = computed(() => {
 .qid {
   font-family: var(--font-mono);
   font-weight: 700;
-  flex: none;
+  /* definite cap only: a percentage max-width is ignored by intrinsic sizing,
+     so a long locate/id would stretch the row's min-content past every
+     container and the list could never shrink (overflowing the page) */
+  max-width: 12rem;
+  /* 定位回退成文件名主干时可能很长：允许收缩并截断（悬停可见全名），
+     否则窄屏下它会把题干预览挤没、行的渐隐截断也跟着错位 */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .qseq {

@@ -28,9 +28,12 @@ export interface Filter {
   match: 'all' | 'any'
   sort: SortKey
   includeMastered?: boolean
+
+  search?: string
+
+  searchRegex?: boolean
 }
 
-/** Sort options shared by the bank list and the book-new sort bar */
 export const SORT_OPTIONS: { value: SortKey; label: string }[] = [
   { value: 'random', label: '随机' },
   { value: 'id', label: '按定位' },
@@ -114,45 +117,95 @@ function evalCond(c: Cond, q: Question): boolean {
   }
 }
 
-export function applyFilter(qs: Question[], f: Filter): Question[] {
-  const list = qs.filter((q) => {
-    if (!f.includeMastered && isMastered(q)) return false
-    if (!f.conds.length) return true
-    return f.match === 'all' ? f.conds.every((c) => evalCond(c, q)) : f.conds.some((c) => evalCond(c, q))
-  })
-  const sorted = [...list]
-  const byId = (a: Question, b: Question) =>
-    a.id.localeCompare(b.id, undefined, { numeric: true })
-  switch (f.sort) {
+export function searchHaystack(q: Question): string {
+  return [
+    q.file ?? '',
+    q.id,
+    q.subject ?? '',
+    q.origin ?? '',
+    q.chapter,
+    q.locate ?? '',
+    q.qtype,
+    ...q.stem,
+    ...q.options.map((o) => o.text),
+    ...(q.answer ?? []),
+    ...q.solution,
+    ...(q.notes ?? []),
+  ].join('\n')
+}
+
+export function matchesSearch(q: Question, search: string, regex: boolean): boolean {
+  const hay = searchHaystack(q)
+  if (!regex) return hay.toLowerCase().includes(search.toLowerCase())
+  try {
+    return new RegExp(search, 'i').test(hay)
+  } catch {
+    return hay.toLowerCase().includes(search.toLowerCase())
+  }
+}
+
+function searchMatcher(f: Filter): (q: Question) => boolean {
+  const needle = f.search?.trim() ?? ''
+  const needleLower = needle.toLowerCase()
+  const re = (() => {
+    if (!needle || !f.searchRegex) return null
+    try {
+      return new RegExp(needle, 'i')
+    } catch {
+      return null
+    }
+  })()
+  return (q) => {
+    if (!needle) return true
+    const hay = searchHaystack(q)
+    return re ? re.test(hay) : hay.toLowerCase().includes(needleLower)
+  }
+}
+
+function passes(q: Question, f: Filter, match: (q: Question) => boolean): boolean {
+  if (!match(q)) return false
+  if (!f.includeMastered && isMastered(q)) return false
+  if (!f.conds.length) return true
+  return f.match === 'all' ? f.conds.every((c) => evalCond(c, q)) : f.conds.some((c) => evalCond(c, q))
+}
+
+const byId = (a: Question, b: Question) => a.id.localeCompare(b.id, undefined, { numeric: true })
+
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
+function sortedBy(list: Question[], sort: Filter['sort']): Question[] {
+  switch (sort) {
     case 'random':
-      for (let i = sorted.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1))
-        ;[sorted[i], sorted[j]] = [sorted[j], sorted[i]]
-      }
-      break
+      return shuffle([...list])
     case 'wrong':
-      sorted.sort((a, b) => statsOf(b).wrong - statsOf(a).wrong || byId(a, b))
-      break
+      return [...list].sort((a, b) => statsOf(b).wrong - statsOf(a).wrong || byId(a, b))
     case 'attempts':
-      sorted.sort((a, b) => statsOf(b).attempts - statsOf(a).attempts || byId(a, b))
-      break
+      return [...list].sort((a, b) => statsOf(b).attempts - statsOf(a).attempts || byId(a, b))
     case 'recentWrong': {
       const lastWrong = new Map(list.map((q) => [questionKey(q), lastWrongAt(q)]))
-      sorted.sort(
+      return [...list].sort(
         (a, b) =>
           (lastWrong.get(questionKey(b)) ?? 0) - (lastWrong.get(questionKey(a)) ?? 0) || byId(a, b),
       )
-      break
     }
     case 'lastAt':
-      sorted.sort(
+      return [...list].sort(
         (a, b) => (statsOf(b).last_at ?? -1) - (statsOf(a).last_at ?? -1) || byId(a, b),
       )
-      break
     default:
-      sorted.sort(byId)
+      return [...list].sort(byId)
   }
-  return sorted
+}
+
+export function applyFilter(qs: Question[], f: Filter): Question[] {
+  const match = searchMatcher(f)
+  return sortedBy(qs.filter((q) => passes(q, f, match)), f.sort)
 }
 
 function lastWrongAt(q: QuestionLike): number {

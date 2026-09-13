@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ImgViewer from './components/ImgViewer.vue'
 import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { BookOpen, Home, List, Settings } from 'lucide-vue-next'
@@ -39,6 +40,7 @@ onMounted(() => {
 
     <SettingsDialog v-if="settingsOpen" @close="settingsOpen = false" />
   </div>
+  <ImgViewer />
 </template>
 
 <style scoped>

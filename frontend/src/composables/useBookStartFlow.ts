@@ -16,14 +16,43 @@ export interface StartFlowContext {
   closeViewing: () => void
 }
 
-export function useBookStartFlow(ctx: StartFlowContext) {
-  const router = useRouter()
-
+function useResumeGuard(ctx: StartFlowContext, router: ReturnType<typeof useRouter>) {
   const resumeAsk = ref(false)
-  const switchAsk = ref<{ def: BookDef; review: boolean } | null>(null)
-
   let pendingStart: (() => void) | null = null
 
+  function guardStart(action: () => void) {
+    if (!ctx.paused.value) {
+      action()
+      return
+    }
+    pendingStart = action
+    resumeAsk.value = true
+  }
+
+  function doResume() {
+    resumeAsk.value = false
+    ctx.paused.value = null
+    router.push('/study?resume=1')
+  }
+
+  async function doDiscard() {
+    resumeAsk.value = false
+    const action = pendingStart
+    pendingStart = null
+    ctx.paused.value = null
+    await clearPaused().catch(() => {})
+    action?.()
+  }
+
+  function closeResumeAsk() {
+    resumeAsk.value = false
+    pendingStart = null
+  }
+
+  return { resumeAsk, guardStart, doResume, doDiscard, closeResumeAsk }
+}
+
+function useLauncher(ctx: StartFlowContext, router: ReturnType<typeof useRouter>, guardStart: (a: () => void) => void) {
   function launch(def: BookDef, review = false) {
     const session = sessionFromDef(def, store.questions)
     if (!session.items.length) {
@@ -38,8 +67,29 @@ export function useBookStartFlow(ctx: StartFlowContext) {
     else guardStart(start)
   }
 
-  /** Start from the view dialog: ask whether to switch when the book is not
-   *  the active one (the active book is remembered per subject) */
+  function studyFrom(q: Question) {
+    const def = ctx.viewing.value
+    if (!def) return
+    const base = sessionFromDef(def, store.questions)
+    const at = base.items.findIndex((it) => it.id === q.id)
+    if (at < 0) return
+    const session: BookSession = { ...base, title: `${def.name} · 从第${at + 1}题起`, items: base.items.slice(at) }
+    ctx.closeViewing()
+    guardStart(() => {
+      currentSession.value = session
+      router.push('/book/study')
+    })
+  }
+
+  return { launch, studyFrom }
+}
+
+function useBookSwitching(
+  ctx: StartFlowContext,
+  launch: (def: BookDef, review?: boolean) => void,
+) {
+  const switchAsk = ref<{ def: BookDef; review: boolean } | null>(null)
+
   function startFromViewing(review = false) {
     const def = ctx.viewing.value
     if (!def) return
@@ -78,64 +128,30 @@ export function useBookStartFlow(ctx: StartFlowContext) {
     launch(a.def, a.review)
   }
 
-  function studyFrom(q: Question) {
-    const def = ctx.viewing.value
-    if (!def) return
-    const base = sessionFromDef(def, store.questions)
-    const at = base.items.findIndex((it) => it.id === q.id)
-    if (at < 0) return
-    const session: BookSession = { ...base, title: `${def.name} · 从第${at + 1}题起`, items: base.items.slice(at) }
-    ctx.closeViewing()
-    guardStart(() => {
-      currentSession.value = session
-      router.push('/book/study')
-    })
-  }
+  return { switchAsk, startFromViewing, confirmSwitch, withoutSwitch }
+}
 
-  function guardStart(action: () => void) {
-    if (!ctx.paused.value) {
-      action()
-      return
-    }
-    pendingStart = action
-    resumeAsk.value = true
-  }
+export function useBookStartFlow(ctx: StartFlowContext) {
+  const router = useRouter()
+  const guard = useResumeGuard(ctx, router)
+  const { launch, studyFrom } = useLauncher(ctx, router, guard.guardStart)
+  const switching = useBookSwitching(ctx, launch)
 
-  function doResume() {
-    resumeAsk.value = false
-    ctx.paused.value = null
-    router.push('/study?resume=1')
-  }
-
-  async function doDiscard() {
-    resumeAsk.value = false
-    const action = pendingStart
-    pendingStart = null
-    ctx.paused.value = null
-    await clearPaused().catch(() => {})
-    action?.()
-  }
-
-  function viewBook(def: BookDef) {
+  const viewBook = (def: BookDef) => {
     ctx.viewing.value = def
   }
 
-  function closeResumeAsk() {
-    resumeAsk.value = false
-    pendingStart = null
-  }
-
   return {
-    resumeAsk,
-    switchAsk,
+    resumeAsk: guard.resumeAsk,
+    switchAsk: switching.switchAsk,
     viewBook,
     launch,
-    startFromViewing,
-    confirmSwitch,
-    withoutSwitch,
+    startFromViewing: switching.startFromViewing,
+    confirmSwitch: switching.confirmSwitch,
+    withoutSwitch: switching.withoutSwitch,
     studyFrom,
-    doResume,
-    doDiscard,
-    closeResumeAsk,
+    doResume: guard.doResume,
+    doDiscard: guard.doDiscard,
+    closeResumeAsk: guard.closeResumeAsk,
   }
 }

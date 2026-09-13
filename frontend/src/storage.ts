@@ -1,10 +1,3 @@
-/**
- * Safe localStorage access, centralized.
- *
- * Safari private mode (and storage-disabled browsers) make even getItem throw,
- * and a throw during app init blank-screens the whole site. No direct
- * localStorage use outside this module.
- */
 export const StorageKeys = {
   subject: 'drill:subject',
   theme: 'drill:theme',
@@ -26,11 +19,10 @@ export function writeString(key: string, v: string): void {
   try {
     localStorage.setItem(key, v)
   } catch {
-    // storage unavailable/quota exceeded: preferences just stay in memory
+
   }
 }
 
-/** Parsed JSON value, or undefined when missing/corrupt/unreadable */
 export function readJSON<T = unknown>(key: string): T | undefined {
   try {
     const raw = localStorage.getItem(key)
@@ -40,7 +32,6 @@ export function readJSON<T = unknown>(key: string): T | undefined {
   }
 }
 
-/** @returns whether the write succeeded (callers may retry on quota) */
 export function writeJSON(key: string, v: unknown): boolean {
   try {
     localStorage.setItem(key, JSON.stringify(v))

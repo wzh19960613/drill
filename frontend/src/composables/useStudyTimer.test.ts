@@ -1,11 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useStudyTimer } from './useStudyTimer'
 
-/**
- * Timer accumulation tests: node env lacks window/document, so both globals
- * are stubbed; performance.now is faked together with the clock.
- */
-
 let hidden = false
 
 beforeEach(() => {
@@ -50,7 +45,7 @@ describe('useStudyTimer', () => {
     t.start()
     vi.advanceTimersByTime(500)
     t.stop()
-    vi.advanceTimersByTime(500) // stopped: nothing accumulates
+    vi.advanceTimersByTime(500)
     expect(t.sessionMs.value).toBe(500)
     t.start()
     vi.advanceTimersByTime(250)

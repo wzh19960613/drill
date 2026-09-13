@@ -1,13 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Question } from '../types'
 
-/**
- * Round state-machine tests (store/api/vue-router mocked, real book.ts
- * session helpers): double-mark guard, pending auto-advance cancellation,
- * re-judgement via updateRecord, wrong-only retry, pause-on-leave branches
- * and the stale-build race.
- */
-
 const mockRoute = { query: {} as Record<string, unknown>, path: '/study' }
 const mockRouterPush = vi.fn()
 
@@ -60,7 +53,7 @@ function mkQuestion(id: string, source = 's1'): Question {
     options: [],
     correct_id: null,
     correct_ids: [],
-    answer_line: '',
+    answer: [],
     solution: [],
   }
 }
@@ -126,7 +119,7 @@ describe('mark', () => {
     await round.build()
     addRecord.mockResolvedValue({ id: 11, questionId: 'A', source: 's1', correct: true, at: 1 })
     await round.mark(true)
-    round.next() // user skips manually during the 450ms window
+    round.next()
     expect(round.idx.value).toBe(1)
     vi.advanceTimersByTime(450)
     expect(round.idx.value).toBe(1)
@@ -140,7 +133,7 @@ describe('mark', () => {
     updateRecord.mockResolvedValue(undefined)
     await round.mark(true)
     vi.advanceTimersByTime(450)
-    round.prev() // back to the already-answered A
+    round.prev()
     expect(round.idx.value).toBe(0)
     await round.mark(false)
     expect(updateRecord).toHaveBeenCalledWith(11, false, expect.anything())
@@ -174,9 +167,9 @@ describe('retryWrongOnly', () => {
       async (_q: unknown, correct: boolean) =>
         ({ id: 11, questionId: 'A', source: 's1', correct, at: 1 }) as never,
     )
-    await round.mark(false) // A wrong
+    await round.mark(false)
     vi.advanceTimersByTime(450)
-    await round.mark(true) // B right
+    await round.mark(true)
     vi.advanceTimersByTime(450)
     round.retryWrongOnly()
     expect(round.session.value?.items.map((it) => it.id)).toEqual(['A'])
@@ -245,7 +238,7 @@ describe('leaveWithSummary', () => {
     addRecord.mockResolvedValue({ id: 11, questionId: 'A', source: 's1', correct: true, at: 1 })
     await round.mark(true)
     const first = round.leaveWithSummary()
-    await round.leaveWithSummary() // in-flight guard
+    await round.leaveWithSummary()
     release()
     await first
     expect(savePaused).toHaveBeenCalledTimes(1)
@@ -274,7 +267,7 @@ describe('build', () => {
       },
     ])
     await first
-    // the older build resolved late: it must stay abandoned
+
     expect(round.session.value?.title).toBe('快速刷题')
     expect(round.session.value?.items.map((it) => it.id)).toEqual(['A', 'B', 'C'])
   })

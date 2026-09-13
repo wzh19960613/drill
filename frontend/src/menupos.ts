@@ -2,8 +2,6 @@ export type MenuAlign = 'left' | 'right'
 
 const EDGE = 8
 
-/** Viewport placement for a popup menu; x is the anchored edge (per align),
-    y the top edge; both axes clamp so the menu stays fully on screen. */
 export function placeMenu(
   x: number,
   y: number,

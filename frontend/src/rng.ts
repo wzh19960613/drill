@@ -46,8 +46,6 @@ export function randomSeed(): string {
   return randomToken(4).toUpperCase()
 }
 
-/** Random lowercase-alphanumeric token for ids/tokens (Math.random is enough:
- *  these are uniqueness tokens, not secrets) */
 export function randomToken(len = 8): string {
   let s = ''
   while (s.length < len) s += Math.random().toString(36).slice(2, 10)

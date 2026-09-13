@@ -135,7 +135,7 @@ fn upgrade_date_fields(arg: &mut JsValue, js: &mut Context) {
     let iso = iso_val.to_std_string_escaped();
     let parts: Vec<&str> = iso.split('-').collect();
     if parts.len() < 3 {
-        // non-ISO date (e.g. "2026/9/4"): leave the raw string untouched
+
         return;
     }
     let (y, m, d) = (parts[0], parts[1], parts[2]);
@@ -171,7 +171,7 @@ mod tests {
                 "meta": {{"workbook": "{workbook}", "answers": "{answers}"}},
                 "items": [{{"id": "P1", "seq": 1, "source": "s", "subject": "数学", "origin": "o",
                     "locate": "P1-1", "chapter": "第1章", "qtype": "选择题", "stem": [],
-                    "options": [], "correct_ids": [], "answer_line": "", "solution": [], "notes": []}}]
+                    "options": [], "correct_ids": [], "answer": [], "solution": [], "notes": []}}]
             }}"#
         ))
         .unwrap()
@@ -202,7 +202,7 @@ mod tests {
             "header": { "center": "(c) => c.date.getFullYear() + ' ' + c.dateStrs.zh" },
             "items": [{"id": "P1", "seq": 1, "source": "s", "subject": "数学", "origin": "o",
                 "locate": "P1-1", "chapter": "第1章", "qtype": "选择题", "stem": [],
-                "options": [], "correct_ids": [], "answer_line": "", "solution": [], "notes": []}]
+                "options": [], "correct_ids": [], "answer": [], "solution": [], "notes": []}]
         }"#;
         let payload: ExportPayload = serde_json::from_str(json).unwrap();
         let texts = page_texts(&payload, 1, 1);
@@ -211,19 +211,18 @@ mod tests {
 
     #[test]
     fn non_iso_date_keeps_the_raw_string() {
-        // "2026/9/4" is not ISO: no Date object, no dateStrs are injected
+
         let json = r#"{
             "doc": "workbook", "paper": "A4", "perPage": 2, "title": "t", "date": "2026/9/4",
             "header": { "center": "(c) => typeof c.date + '/' + (c.dateStrs ? 'has' : 'none')" },
             "items": [{"id": "P1", "seq": 1, "source": "s", "subject": "数学", "origin": "o",
                 "locate": "P1-1", "chapter": "第1章", "qtype": "选择题", "stem": [],
-                "options": [], "correct_ids": [], "answer_line": "", "solution": [], "notes": []}]
+                "options": [], "correct_ids": [], "answer": [], "solution": [], "notes": []}]
         }"#;
         let payload: ExportPayload = serde_json::from_str(json).unwrap();
         let texts = page_texts(&payload, 1, 1);
         assert_eq!(texts.header.1, "string/none");
 
-        // sanity: the same slot with an ISO date sees a Date object
         let json = json.replace("2026/9/4", "2026-09-04");
         let payload: ExportPayload = serde_json::from_str(&json).unwrap();
         let texts = page_texts(&payload, 1, 1);

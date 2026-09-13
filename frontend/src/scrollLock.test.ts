@@ -29,7 +29,7 @@ describe('scrollLock', () => {
   it('locks and restores the document scroller', () => {
     lockBodyScroll()
     expect(html.style.overflow).toBe('hidden')
-    expect(html.style.paddingRight).toBe('8px') // scrollbar width compensated
+    expect(html.style.paddingRight).toBe('8px')
     unlockBodyScroll()
     expect(html.style.overflow).toBe('')
     expect(html.style.paddingRight).toBe('')
@@ -48,7 +48,7 @@ describe('scrollLock', () => {
     const originalApp = fakeEl()
     app = originalApp
     lockBodyScroll()
-    // .app gets rebuilt while locked: a fresh query would miss the locked node
+
     app = fakeEl()
     unlockBodyScroll()
     expect(originalApp.style.overflow).toBe('')

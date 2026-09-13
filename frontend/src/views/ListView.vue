@@ -22,7 +22,7 @@ const confirmDelQ = ref(false)
 
 const list = computed(() => applyFilter(subjectQuestions.value, filter.value))
 
-/** The bank sort selector hides the random entry (it belongs to book building) */
+
 const SORTS = SORT_OPTIONS.filter((o) => o.value !== 'random')
 
 function pickSort(e: Event) {
@@ -44,9 +44,24 @@ async function onSourcesChanged() {
   await loadAll(true)
 }
 
+
+function onOpenQuestion(q: Question, mode: 'view' | 'edit') {
+  if (mode === 'edit') editing.value = q
+  else detailQ.value = q
+}
+
 const editing = ref<Question | null | 'new'>(null)
+/** target folder prefilled in the save dialog when creating from the tree */
+const createIn = ref<{ source: string; dir: string } | null>(null)
 
 function openNew() {
+  createIn.value = null
+  editing.value = 'new'
+}
+
+function onCreateIn(source: string, dir: string) {
+  sourcesOpen.value = false
+  createIn.value = { source, dir }
   editing.value = 'new'
 }
 
@@ -85,7 +100,7 @@ onBeforeUnmount(() => {
 
 function onKey(e: KeyboardEvent) {
   if (editing.value) return
-  if (detailQ.value) return // the dialog handles Esc itself in the capture phase
+  if (detailQ.value) return 
   if (e.code === 'Escape' && confirmDelQ.value) {
     confirmDelQ.value = false
     return
@@ -132,7 +147,13 @@ function invert() {
 
     <QuestionList v-model="selection.ids" mode="manage" :questions="list" @open="detailQ = $event" />
 
-    <SourcesDialog v-if="sourcesOpen" @close="sourcesOpen = false" @changed="onSourcesChanged" />
+    <SourcesDialog
+      v-if="sourcesOpen"
+      @close="sourcesOpen = false"
+      @changed="onSourcesChanged"
+      @open-question="onOpenQuestion"
+      @create-in="onCreateIn"
+    />
 
     <QuestionDetail
       v-if="detailQ"
@@ -150,6 +171,7 @@ function invert() {
       v-if="editing"
       :question="editing === 'new' ? null : editing"
       :sources="sources"
+      :create-in="createIn"
       @close="editing = null"
       @saved="onSaved"
     />
@@ -179,7 +201,7 @@ function invert() {
    Chrome/Safari); narrow screens keep the horizontal scroll container
    (sticky is captured there and gives up sticking), page vertical scroll as usual */
 @container (min-width: 40.0625rem) {
-  .list :deep(.ql) {
+  .list :deep(.ql:not(.x-overflow)) {
     overflow: visible;
     --ghead-top:calc(env(safe-area-inset-top) + 0.125rem);
   }

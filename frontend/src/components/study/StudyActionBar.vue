@@ -7,7 +7,7 @@ defineProps<{
   showAnswer: boolean
   idx: number
   total: number
-  /** The current question's verdict in this round (null = not yet marked) */
+  
   marked: boolean | null
   hotkeys: Record<string, string>
 }>()

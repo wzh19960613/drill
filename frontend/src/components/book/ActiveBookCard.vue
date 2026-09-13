@@ -7,6 +7,7 @@ defineProps<{
   def: BookDef
   resumeActive: boolean
   subjectsLine: string
+  staleCount?: number
 }>()
 
 const emit = defineEmits<{
@@ -22,6 +23,11 @@ const emit = defineEmits<{
       <span class="cur-title">{{ def.name }}</span>
       <span v-if="subjectsLine" class="chip">{{ subjectsLine }}</span>
       <span class="chip">{{ def.items.length }} 题</span>
+      <span
+        v-if="staleCount"
+        class="chip stale"
+        title="这些题目的题源被移除、文件夹被移动，或题源的「子文件夹」开关被关闭；恢复后自动重新生效"
+      >{{ staleCount }} 题已失效</span>
       <span class="chip">{{ dateZh(def.date) }}</span>
     </div>
     <div class="cur-actions">
@@ -70,6 +76,11 @@ const emit = defineEmits<{
 .cur-title {
   font-size: 1.25rem;
   font-weight: 800;
+}
+
+.chip.stale {
+  color: var(--bad);
+  background: var(--bad-weak);
 }
 
 .cur-actions {

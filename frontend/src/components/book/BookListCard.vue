@@ -15,6 +15,7 @@ defineProps<{
   showSubjects?: boolean
   subjectCountOf?: (b: BookDef) => number
   currentSubject?: string
+  staleCountOf?: (b: BookDef) => number
 }>()
 
 const emit = defineEmits<{
@@ -43,6 +44,11 @@ const emit = defineEmits<{
               含{{ currentSubject }} {{ subjectCountOf?.(b) }} 题 · 共 {{ b.items.length }} 题
             </span>
             <span v-if="!mixed" class="chip">{{ b.items.length }} 题</span>
+            <span
+              v-if="staleCountOf?.(b)"
+              class="chip stale"
+              title="这些题目的题源被移除、文件夹被移动，或题源的「子文件夹」开关被关闭；恢复后自动重新生效"
+            >{{ staleCountOf!(b) }} 题已失效</span>
             <span class="chip">{{ dateZh(b.date) }}</span>
             <span v-if="b.id === activeId" class="chip brand">当前使用</span>
           </div>
@@ -111,6 +117,11 @@ const emit = defineEmits<{
   min-width: 3.75rem;
 }
 
+.chip.stale {
+  color: var(--bad);
+  background: var(--bad-weak);
+}
+
 .bk-actions {
   display: flex;
   gap: 0.375rem;
@@ -145,7 +156,7 @@ const emit = defineEmits<{
     display: none;
   }
 
-  .bk-info .chip:not(.brand) {
+  .bk-info .chip:not(.brand):not(.stale) {
     display: none;
   }
 

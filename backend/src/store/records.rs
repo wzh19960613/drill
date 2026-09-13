@@ -13,9 +13,6 @@ struct SaveFile {
     records: Vec<Record>,
 }
 
-/// Answer-history store. Mutation and serialization happen under the lock;
-/// the (potentially slow) disk write happens after releasing it, so async
-/// handlers never block other requests on filesystem I/O.
 pub struct RecordStore {
     store: JsonStore<SaveFile>,
 }
@@ -87,8 +84,6 @@ impl RecordStore {
         }
     }
 
-    /// Best-effort compact write outside the lock; failures are logged so a
-    /// read-only disk degrades to "records not persisted" instead of a panic.
     fn write(&self, bytes: &[u8]) {
         if let Err(e) = atomic_write(self.store.path(), bytes) {
             log_warn(&format!(

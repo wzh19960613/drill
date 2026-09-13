@@ -20,9 +20,6 @@ fn font_files() -> Vec<&'static [u8]> {
     files
 }
 
-/// Registry of generated sources: each compile registers its generated main
-/// file under a unique virtual path before compiling, and removes it again
-/// afterwards so the texts do not accumulate for the lifetime of the process.
 #[derive(Default)]
 pub struct SourceRegistry {
     sources: Mutex<HashMap<String, String>>,
@@ -69,8 +66,6 @@ impl FileResolver for SourceRegistry {
     }
 }
 
-/// Built once per process; every export compiles through it so comemo
-/// memoization and font parsing are shared.
 pub fn build_engine(registry: std::sync::Arc<SourceRegistry>) -> TypstEngine {
     static MITEX_PRELUDE: &str = include_str!("../../assets/mitex/prelude.typ");
     static MITEX_STANDARD: &str = include_str!("../../assets/mitex/standard.typ");

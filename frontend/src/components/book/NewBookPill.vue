@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { Plus } from 'lucide-vue-next'
 
-/** New book: the whole capsule is the button (brand-colored, sticky above the
-    bottom navigation row so it stays visible while scrolling; on wide screens
-    it shrinks and centers but keeps sticking to the bottom) */
+
 defineProps<{ label?: string }>()
 
 const emit = defineEmits<{ (e: 'click'): void }>()

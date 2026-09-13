@@ -6,9 +6,6 @@ use serde::{de::DeserializeOwned, Serialize};
 
 use crate::fsutil::{atomic_write, lock, log_warn};
 
-/// Shared persistence skeleton for the JSON-backed stores: load (a missing or
-/// corrupted file resets to the default, with a warning for corruption),
-/// an internal Mutex for mutation, and atomic saves.
 pub struct JsonStore<T> {
     path: PathBuf,
     inner: Mutex<T>,
@@ -43,14 +40,10 @@ impl<T: Serialize + DeserializeOwned + Default> JsonStore<T> {
         &self.path
     }
 
-    /// Run a read-only closure against the current value.
     pub fn view<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         f(&*lock(&self.inner))
     }
 
-    /// Mutate the value and persist it in one step (still holding the lock
-    /// while serializing, so saves stay ordered). Write failures are logged,
-    /// never panic.
     pub fn mutate<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
         let mut guard = lock(&self.inner);
         let out = f(&mut guard);
@@ -58,13 +51,10 @@ impl<T: Serialize + DeserializeOwned + Default> JsonStore<T> {
         out
     }
 
-    /// Mutate the value without persisting; the caller persists afterwards
-    /// (used when the write must happen outside the lock).
     pub fn edit<R>(&self, f: impl FnOnce(&mut T) -> R) -> R {
         f(&mut *lock(&self.inner))
     }
 
-    /// Serialize and atomically write the given snapshot; logs failures.
     pub fn persist(&self, t: &T) {
         let bytes = match serde_json::to_vec_pretty(t) {
             Ok(b) => b,
@@ -84,7 +74,6 @@ impl<T: Serialize + DeserializeOwned + Default> JsonStore<T> {
         }
     }
 
-    /// Persist the current value (lock + persist).
     pub fn save(&self) {
         let guard = lock(&self.inner);
         self.persist(&guard);

@@ -1,29 +1,56 @@
-import { computed, ref } from 'vue'
+import { computed, ref, type ComputedRef, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { addRecord, currentSubject, store, subjectQuestions, updateRecord } from '../store'
-import { clearPaused, getPaused, savePaused } from '../api'
-import {
-  buildSession,
-  currentSession,
-  fetchBooks,
-  getActiveBookId,
-  pausedFrom,
-  sessionFromDef,
-  sessionFromPaused,
-  type BookSession,
-} from '../book'
+import { addRecord, updateRecord } from '../store'
+import { clearPaused, savePaused } from '../api'
+import { currentSession, pausedFrom, type BookSession } from '../book'
 import { fmtDur } from '../format'
 import { useStudyTimer } from './useStudyTimer'
+import { activeBookSession, quickSession, resumePaused } from './roundSources'
 
-type RoundRecord = { id: number; correct: boolean; ms: number }
-type Toast = (msg: string) => void
+export type RoundRecord = { id: number; correct: boolean; ms: number }
+export type Toast = (msg: string) => void
 
-export function useStudyRound(toast: Toast) {
+export interface RoundCore {
+  route: ReturnType<typeof useRoute>
+  router: ReturnType<typeof useRouter>
+  review: ComputedRef<boolean>
+  session: Ref<BookSession | null>
+  idx: Ref<number>
+  showAnswer: Ref<boolean>
+  done: Ref<boolean>
+  interrupted: Ref<boolean>
+  roundRecords: Ref<Map<string, RoundRecord>>
+  revisitAnswered: Ref<boolean>
+  sessionMs: Ref<number>
+  questionMs: Ref<number>
+  timerPaused: Ref<boolean>
+  startClock: () => void
+  resetQuestion: () => void
+  resetAll: () => void
+  item: ComputedRef<ReturnType<typeof currentItem> | null>
+  total: ComputedRef<number>
+  right: ComputedRef<number>
+  wrong: ComputedRef<number>
+  flags: { marking: boolean; buildSeq: number; exiting: boolean }
+}
+
+type CurrentItem = BookSession['items'][number]
+
+function countVerdicts(records: Map<string, RoundRecord>): { right: number; wrong: number } {
+  let right = 0
+  let wrong = 0
+  for (const v of records.values()) v.correct ? right++ : wrong++
+  return { right, wrong }
+}
+
+function currentItem(core: RoundCore): CurrentItem | null {
+  return core.session.value?.items[core.idx.value] ?? null
+}
+
+function roundCoreState() {
   const route = useRoute()
   const router = useRouter()
-
   const review = computed(() => route.query.mode === 'review')
-
   const session = ref<BookSession | null>(null)
   const idx = ref(0)
   const showAnswer = ref(false)
@@ -31,42 +58,36 @@ export function useStudyRound(toast: Toast) {
   const interrupted = ref(false)
   const roundRecords = ref(new Map<string, RoundRecord>())
   const revisitAnswered = ref(false)
-
-  // per-instance round state (module-level state was shared by every caller)
-  let marking = false
-  let advanceTimer: ReturnType<typeof setTimeout> | undefined
-  let buildSeq = 0
-  let exiting = false
-
   const timer = useStudyTimer(
     () => !review.value && !showAnswer.value && !revisitAnswered.value && !done.value,
   )
-  const { sessionMs, questionMs, paused: timerPaused, start: startClock, resetQuestion, resetAll } = timer
+  return { route, router, review, session, idx, showAnswer, done, interrupted, roundRecords, revisitAnswered, timer }
+}
 
-  const item = computed(() => session.value?.items[idx.value] ?? null)
-  const total = computed(() => session.value?.items.length ?? 0)
-  /** The current question's verdict in this round (null = not yet marked) */
-  const marked = computed(() => {
-    const r = item.value ? roundRecords.value.get(item.value.id) : undefined
-    return r ? r.correct : null
-  })
-  const counts = computed(() => {
-    let right = 0
-    let wrong = 0
-    for (const v of roundRecords.value.values()) {
-      if (v.correct) right++
-      else wrong++
-    }
-    return { right, wrong }
-  })
-  const right = computed(() => counts.value.right)
-  const wrong = computed(() => counts.value.wrong)
-  const unanswered = computed(() => total.value - roundRecords.value.size)
-
-  function resetCounters() {
-    roundRecords.value = new Map()
-    revisitAnswered.value = false
+function useRoundCore(): RoundCore {
+  const st = roundCoreState()
+  const item = computed(() => currentItem(core))
+  const total = computed(() => st.session.value?.items.length ?? 0)
+  const counts = computed(() => countVerdicts(st.roundRecords.value))
+  const core: RoundCore = {
+    ...st,
+    sessionMs: st.timer.sessionMs,
+    questionMs: st.timer.questionMs,
+    timerPaused: st.timer.paused,
+    startClock: st.timer.start,
+    resetQuestion: st.timer.resetQuestion,
+    resetAll: st.timer.resetAll,
+    item,
+    total,
+    right: computed(() => counts.value.right),
+    wrong: computed(() => counts.value.wrong),
+    flags: { marking: false, buildSeq: 0, exiting: false },
   }
+  return core
+}
+
+function useRoundNav(core: RoundCore) {
+  let advanceTimer: ReturnType<typeof setTimeout> | undefined
 
   function cancelAdvance() {
     clearTimeout(advanceTimer)
@@ -74,215 +95,206 @@ export function useStudyRound(toast: Toast) {
   }
 
   function enterQuestion() {
-    const r = item.value ? roundRecords.value.get(item.value.id) : undefined
-    revisitAnswered.value = !!r
-    showAnswer.value = !!r
-    questionMs.value = r ? r.ms : 0
-  }
-
-  async function tryResume(): Promise<boolean> {
-    const p = await getPaused().catch(() => null)
-    const rebuilt = p ? sessionFromPaused(p, store.questions) : null
-    if (!p || !rebuilt) return false
-    session.value = rebuilt.session
-    idx.value = rebuilt.idx
-    const ids = new Set(session.value.items.map((it) => it.id))
-    for (const r of p.results) {
-      if (ids.has(r.qid)) roundRecords.value.set(r.qid, { id: r.id, correct: r.correct, ms: r.ms ?? 0 })
-    }
-    sessionMs.value = p.sessionMs
-    await clearPaused().catch(() => {})
-    enterQuestion()
-    toast(`已恢复进度：已做 ${roundRecords.value.size} / ${session.value.items.length} 题`)
-    return true
-  }
-
-  /** Fallback when no book is active: a quick run over the whole bank. */
-  function quickSession(): BookSession {
-    return buildSession(subjectQuestions.value, {
-      shuffleQ: false,
-      shuffleO: false,
-      seed: '',
-      title: '快速刷题',
-    })
-  }
-
-  async function activeBookSession(): Promise<BookSession | null> {
-    try {
-      const [books, activeId] = await Promise.all([fetchBooks(), getActiveBookId(currentSubject.value)])
-      const def = books.find((b) => b.id === activeId)
-      const s = def ? sessionFromDef(def, store.questions) : null
-      return s && s.items.length ? s : null
-    } catch {
-      return null
-    }
-  }
-
-  async function build() {
-    // A stale build (route watcher + onMounted both fire) must not overwrite a
-    // newer one; every await re-checks the sequence number.
-    const seq = ++buildSeq
-    cancelAdvance()
-    done.value = false
-    interrupted.value = false
-    idx.value = 0
-    showAnswer.value = false
-    resetCounters()
-    if (route.query.resume && (await tryResume())) return
-    if (seq !== buildSeq) return
-    if (route.path === '/book/study' && currentSession.value) {
-      session.value = currentSession.value
-    } else {
-      const s = await activeBookSession()
-      if (seq !== buildSeq) return
-      session.value = s ?? quickSession()
-    }
-    enterQuestion()
+    const r = core.item.value ? core.roundRecords.value.get(core.item.value.id) : undefined
+    core.revisitAnswered.value = !!r
+    core.showAnswer.value = !!r
+    core.questionMs.value = r ? r.ms : 0
   }
 
   function next() {
-    if (!session.value) return
+    if (!core.session.value) return
     cancelAdvance()
-    if (idx.value < session.value.items.length - 1) {
-      idx.value++
+    if (core.idx.value < core.session.value.items.length - 1) {
+      core.idx.value++
       enterQuestion()
     } else {
-      done.value = true
+      core.done.value = true
     }
   }
 
   function prev() {
-    if (idx.value > 0) {
+    if (core.idx.value > 0) {
       cancelAdvance()
-      idx.value--
+      core.idx.value--
       enterQuestion()
     }
   }
 
+  function scheduleAdvance() {
+    advanceTimer = setTimeout(next, 450)
+  }
+
+  return { cancelAdvance, enterQuestion, next, prev, scheduleAdvance }
+}
+
+function useRoundMarking(core: RoundCore, nav: ReturnType<typeof useRoundNav>, toast: Toast) {
   async function mark(correct: boolean, advance = true) {
-    if (!item.value || done.value || marking) return
-    marking = true
-    cancelAdvance()
+    const q = core.item.value
+    if (!q || core.done.value || core.flags.marking) return
+    core.flags.marking = true
+    nav.cancelAdvance()
     try {
-      const q = item.value
-      const qid = q.id
-      const ms = review.value ? undefined : Math.round(questionMs.value)
-      const prevRecord = roundRecords.value.get(qid)
-      if (prevRecord) {
-        await updateRecord(prevRecord.id, correct, ms)
-        prevRecord.correct = correct
-        prevRecord.ms = ms ?? 0
-        toast(`已改为「${correct ? '做对了' : '做错了'}」`)
-      } else {
-        const rec = await addRecord(q, correct, ms)
-        roundRecords.value.set(qid, { id: rec.id, correct, ms: ms ?? 0 })
-        const label = correct ? '做对了' : '做错了'
-        toast(review.value ? `已记「${label}」` : `已记「${label}」（本题 ${fmtDur(questionMs.value)}）`)
-      }
-      if (advance) advanceTimer = setTimeout(next, 450)
+      const ms = core.review.value ? undefined : Math.round(core.questionMs.value)
+      const prevRecord = core.roundRecords.value.get(q.id)
+      if (prevRecord) await remark(prevRecord, correct, ms)
+      else await recordFresh(q.id, correct, ms)
+      if (advance) nav.scheduleAdvance()
     } finally {
-      marking = false
+      core.flags.marking = false
     }
   }
-  function toggleTimer() {
-    if (showAnswer.value) {
-      toast('显示答案时计时自动暂停')
-      return
-    }
-    timerPaused.value = !timerPaused.value
-    toast(timerPaused.value ? '计时已暂停' : '计时已恢复')
+
+  async function remark(prevRecord: RoundRecord, correct: boolean, ms?: number) {
+    await updateRecord(prevRecord.id, correct, ms)
+    prevRecord.correct = correct
+    prevRecord.ms = ms ?? 0
+    toast(`已改为「${correct ? '做对了' : '做错了'}」`)
   }
 
-  function resetTimer() {
-    resetQuestion()
-    toast('本题计时已重置')
+  async function recordFresh(qid: string, correct: boolean, ms?: number) {
+    const rec = await addRecord(core.item.value!, correct, ms)
+    core.roundRecords.value.set(qid, { id: rec.id, correct, ms: ms ?? 0 })
+    const label = correct ? '做对了' : '做错了'
+    toast(core.review.value ? `已记「${label}」` : `已记「${label}」（本题 ${fmtDur(core.questionMs.value)}）`)
   }
 
-  function retryAll() {
-    idx.value = 0
-    done.value = false
+  return { mark }
+}
+
+function useRoundBuild(core: RoundCore, nav: ReturnType<typeof useRoundNav>, toast: Toast) {
+  function resetRound() {
+    nav.cancelAdvance()
+    core.done.value = false
+    core.interrupted.value = false
+    core.idx.value = 0
+    core.showAnswer.value = false
     resetCounters()
-    resetAll()
-    enterQuestion()
+  }
+
+  function resetCounters() {
+    core.roundRecords.value = new Map()
+    core.revisitAnswered.value = false
+  }
+
+  async function build() {
+    const seq = ++core.flags.buildSeq
+    resetRound()
+    if (core.route.query.resume && (await resumePaused(core, nav, toast))) return
+    if (seq !== core.flags.buildSeq) return
+    if (core.route.path === '/book/study' && currentSession.value) {
+      core.session.value = currentSession.value
+    } else {
+      const s = await activeBookSession()
+      if (seq !== core.flags.buildSeq) return
+      core.session.value = s ?? quickSession()
+    }
+    nav.enterQuestion()
+  }
+
+  return { build }
+}
+
+function useRoundRetry(core: RoundCore, nav: ReturnType<typeof useRoundNav>, toast: Toast) {
+  function retryAll() {
+    core.idx.value = 0
+    core.done.value = false
+    core.roundRecords.value = new Map()
+    core.revisitAnswered.value = false
+    core.resetAll()
+    nav.enterQuestion()
   }
 
   function retryWrongOnly() {
-    if (!session.value) return
-    if (!wrong.value) {
+    if (!core.session.value) return
+    if (!core.wrong.value) {
       toast('本轮没有做错的题')
-      done.value = false
+      core.done.value = false
       return
     }
-    session.value = {
-      ...session.value,
-      items: session.value.items.filter((it) => roundRecords.value.get(it.id)?.correct === false),
+    core.session.value = {
+      ...core.session.value,
+      items: core.session.value.items.filter((it) => core.roundRecords.value.get(it.id)?.correct === false),
     }
-    idx.value = 0
-    done.value = false
-    resetCounters()
-    enterQuestion()
+    core.idx.value = 0
+    core.done.value = false
+    core.roundRecords.value = new Map()
+    core.revisitAnswered.value = false
+    nav.enterQuestion()
   }
 
+  return { retryAll, retryWrongOnly }
+}
+
+function useRoundEnding(core: RoundCore, nav: ReturnType<typeof useRoundNav>) {
   async function leaveWithSummary() {
-    if (!review.value && !done.value && roundRecords.value.size >= 1 && item.value) {
-      if (exiting) return
-      exiting = true
+    if (!core.review.value && !core.done.value && core.roundRecords.value.size >= 1 && core.item.value) {
+      if (core.flags.exiting) return
+      core.flags.exiting = true
       try {
-        await savePaused(pausedFrom(session.value!, idx.value, sessionMs.value, roundRecords.value)).catch(() => {})
+        await savePaused(pausedFrom(core.session.value!, core.idx.value, core.sessionMs.value, core.roundRecords.value)).catch(() => {})
       } finally {
-        exiting = false
+        core.flags.exiting = false
       }
-      interrupted.value = true
-      done.value = true
+      core.interrupted.value = true
+      core.done.value = true
       return
     }
-    router.push('/')
+    core.router.push('/')
   }
 
   async function continueInterrupted() {
     await clearPaused().catch(() => {})
-    interrupted.value = false
-    done.value = false
-    enterQuestion()
+    core.interrupted.value = false
+    core.done.value = false
+    nav.enterQuestion()
   }
 
   function leave() {
-    if (done.value) {
-      router.push('/')
+    if (core.done.value) {
+      core.router.push('/')
       return
     }
     void leaveWithSummary()
   }
 
+  return { leaveWithSummary, continueInterrupted, leave }
+}
+
+export function useStudyRound(toast: Toast) {
+  const core = useRoundCore()
+  const nav = useRoundNav(core)
+  const { mark } = useRoundMarking(core, nav, toast)
+  const { build } = useRoundBuild(core, nav, toast)
+  const { retryAll, retryWrongOnly } = useRoundRetry(core, nav, toast)
+  const { leaveWithSummary, continueInterrupted, leave } = useRoundEnding(core, nav)
+
+  function toggleTimer() {
+    if (core.showAnswer.value) {
+      toast('显示答案时计时自动暂停')
+      return
+    }
+    core.timerPaused.value = !core.timerPaused.value
+    toast(core.timerPaused.value ? '计时已暂停' : '计时已恢复')
+  }
+
+  function resetTimer() {
+    core.resetQuestion()
+    toast('本题计时已重置')
+  }
+
+  const marked = computed(() => {
+    const r = core.item.value ? core.roundRecords.value.get(core.item.value.id) : undefined
+    return r ? r.correct : null
+  })
+  const unanswered = computed(() => core.total.value - core.roundRecords.value.size)
   return {
-    review,
-    session,
-    idx,
-    showAnswer,
-    done,
-    interrupted,
-    roundRecords,
-    revisitAnswered,
-    sessionMs,
-    questionMs,
-    timerPaused,
-    item,
-    total,
-    marked,
-    right,
-    wrong,
-    unanswered,
-    build,
-    startClock,
-    next,
-    prev,
-    mark,
-    toggleTimer,
-    resetTimer,
-    retryAll,
-    retryWrongOnly,
-    continueInterrupted,
-    leave,
-    leaveWithSummary,
+    review: core.review, session: core.session, idx: core.idx, showAnswer: core.showAnswer,
+    done: core.done, interrupted: core.interrupted, roundRecords: core.roundRecords,
+    revisitAnswered: core.revisitAnswered, sessionMs: core.sessionMs,
+    questionMs: core.questionMs, timerPaused: core.timerPaused,
+    item: core.item, total: core.total, marked, right: core.right, wrong: core.wrong,
+    unanswered, build, startClock: core.startClock, next: nav.next, prev: nav.prev,
+    mark, toggleTimer, resetTimer, retryAll, retryWrongOnly, continueInterrupted,
+    leave, leaveWithSummary,
   }
 }

@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { isMastered, loadAll, toggleMastered } from '../store'
-import { codeIndex, loadHotkeys, type HotkeyAction, type HotkeyMap } from '../hotkeys'
+import { applyAnswerActions, codeIndex, loadHotkeys, type HotkeyAction, type HotkeyMap } from '../hotkeys'
 import { useFavorites } from '../composables/useFavorites'
 import { useStudyRound } from '../composables/useStudyRound'
 import { copyQuestionPart } from '../composables/copyText'
@@ -35,12 +35,6 @@ const hotkeyIdx = computed(() => codeIndex(hotkeys.value))
 function runAction(a: HotkeyAction, revealedAtPress: boolean) {
   if (round.review.value && ['showAnswer', 'hideAnswer', 'timerToggle', 'timerReset'].includes(a)) return
   switch (a) {
-    case 'showAnswer':
-      if (!revealedAtPress) round.showAnswer.value = true
-      break
-    case 'hideAnswer':
-      if (!round.review.value) round.showAnswer.value = false
-      break
     case 'markRight':
       if (revealedAtPress) void round.mark(true)
       break
@@ -65,6 +59,13 @@ function runAction(a: HotkeyAction, revealedAtPress: boolean) {
     case 'markMastered':
       void toggleMasteredNow()
       break
+  }
+}
+
+function applyAnswerKeys(actions: HotkeyAction[], revealedAtPress: boolean) {
+  const answerActions = actions.filter((a) => a === 'showAnswer' || a === 'hideAnswer')
+  if (answerActions.length && !round.review.value) {
+    round.showAnswer.value = applyAnswerActions(revealedAtPress, answerActions)
   }
 }
 
@@ -107,6 +108,7 @@ function onKey(e: KeyboardEvent) {
   if (!actions?.length) return
   e.preventDefault()
   const revealedAtPress = round.review.value || round.showAnswer.value
+  applyAnswerKeys(actions, revealedAtPress)
   for (const a of actions) runAction(a, revealedAtPress)
 }
 

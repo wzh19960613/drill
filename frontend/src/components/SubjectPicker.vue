@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { currentSubject, subjects, UNKNOWN } from '../store'
 
-/** A lone subject has nothing to filter → plain label instead of a picker */
+
 const named = computed(() => subjects.value.filter((s) => s !== UNKNOWN))
 </script>
 

@@ -6,6 +6,9 @@ use super::QOption;
 pub struct Question {
     pub id: String,
     pub source: String,
+
+    #[serde(default)]
+    pub file: String,
     #[serde(default)]
     pub subject: String,
     #[serde(default)]
@@ -18,7 +21,8 @@ pub struct Question {
     pub options: Vec<QOption>,
     pub correct_id: Option<u8>,
     pub correct_ids: Vec<u8>,
-    pub answer_line: String,
+
+    pub answer: Vec<String>,
     pub solution: Vec<String>,
     pub notes: Vec<String>,
 }

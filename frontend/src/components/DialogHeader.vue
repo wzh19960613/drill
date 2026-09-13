@@ -1,16 +1,7 @@
 <script setup lang="ts">
 import { X } from 'lucide-vue-next'
 
-/**
- * Unified dialog header: main title + subtitle + right-side actions + close button.
- * Responsive: on narrower windows the main and subtitle stack on two rows; on very narrow
- * ones the title centers, action buttons wrap and fill the row, and the close button pins
- * to the top-right. Traffic-light avoidance is handled globally by the html.pwa rules.
- * flush: the dialog's top edge touches the screen (full-screen dialogs) — in that case the
- * header padding includes the status-bar safe area; centered dialogs (default) do not touch
- * the screen, the safe distance is handled by the outer margins, and the header keeps no
- * large empty space.
- */
+
 withDefaults(
   defineProps<{ title?: string; subtitle?: string; flush?: boolean; noBorder?: boolean }>(),
   {

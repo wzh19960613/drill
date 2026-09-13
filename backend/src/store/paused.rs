@@ -24,8 +24,6 @@ impl PausedStore {
         self.store.mutate(|inner| *inner = Some(v));
     }
 
-    /// Clear the session snapshot: drop it in memory and delete the file so a
-    /// restart does not resurrect a stale pause.
     pub fn clear(&self) {
         self.store.edit(|inner| *inner = None);
         let _ = fs::remove_file(self.store.path());

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  splitBooksBySubject,
   buildSession,
   defFromSession,
   pausedFrom,
@@ -25,7 +26,7 @@ function mkQuestion(id: string, source = 's1'): Question {
     ],
     correct_id: 1,
     correct_ids: [1],
-    answer_line: '(A)',
+    answer: [],
     solution: [],
   }
 }
@@ -47,7 +48,7 @@ describe('buildSession', () => {
     const b = buildSession(qs, { shuffleQ: true, shuffleO: true, seed: 'S1' })
     expect(a.items.map((it) => it.id)).toEqual(b.items.map((it) => it.id))
     expect(a.items.map((it) => it.optionOrder)).toEqual(b.items.map((it) => it.optionOrder))
-    // option order is a permutation of the option indices
+
     for (const it of a.items) expect([...it.optionOrder!].sort()).toEqual([0, 1])
   })
 
@@ -75,7 +76,7 @@ describe('sessionFromDef', () => {
     const def = defFromSession(
       buildSession([mkQuestion('A', 'src1'), mkQuestion('A', 'src2'), mkQuestion('B', 'src1')], OPTS),
     )
-    // Bank has only the src2 variant of A: exactly that one is restored
+
     const s = sessionFromDef(def, [mkQuestion('A', 'src2'), mkQuestion('B', 'src1')])
     expect(s.items.map((it) => `${it.source}/${it.id}`)).toEqual(['src2/A', 'src1/B'])
   })
@@ -107,13 +108,12 @@ describe('pausedFrom / sessionFromPaused', () => {
   it('drops deleted questions and their results', () => {
     const r = sessionFromPaused(paused, [mkQuestion('B'), mkQuestion('C')])!
     expect(r.session.items.map((it) => it.id)).toEqual(['B', 'C'])
-    // The interrupted question B still exists → resume at it
+
     expect(r.idx).toBe(0)
   })
 
   it('resumes at the first unanswered question when the interrupted one was deleted', () => {
-    // Interrupted at C (idx=2), C deleted → stop at the first unanswered
-    // question (A already answered → B)
+
     const p2 = pausedFrom(session, 2, 0, new Map([['A', { id: 9, correct: true, ms: 1 }]]))
     const r = sessionFromPaused(p2, [mkQuestion('A'), mkQuestion('B')])!
     expect(r.idx).toBe(1)
@@ -125,23 +125,19 @@ describe('pausedFrom / sessionFromPaused', () => {
 
   it('falls back to index 0 when everything is answered and the interrupted question is gone', () => {
     const p3 = pausedFrom(session, 2, 0, new Map([['A', { id: 1, correct: true, ms: 1 }], ['B', { id: 2, correct: false, ms: 1 }], ['C', { id: 3, correct: true, ms: 1 }]]))
-    // Interrupted question C no longer in the bank → first unanswered; all
-    // answered → 0
+
     const r = sessionFromPaused(p3, [mkQuestion('A'), mkQuestion('B')])!
     expect(r.idx).toBe(0)
   })
 
   it('keys the resume index by source+id: same id in another source does not hijack it', () => {
     const mixed = buildSession([mkQuestion('A', 'src1'), mkQuestion('A', 'src2'), mkQuestion('B', 'src1')], OPTS)
-    // Interrupted at the second item (src2/A); a bank containing both variants
-    // must resume at src2/A, not at the first same-id match
+
     const p = pausedFrom(mixed, 1, 0, new Map())
     const r = sessionFromPaused(p, [mkQuestion('A', 'src1'), mkQuestion('A', 'src2'), mkQuestion('B', 'src1')])!
     expect(r.idx).toBe(1)
     expect(r.session.items[r.idx].source).toBe('src2')
 
-    // Bank where only the src1 variant survives: src2/A is treated as gone;
-    // nothing was answered, so the resume falls back to the first item (0)
     const r2 = sessionFromPaused(p, [mkQuestion('A', 'src1'), mkQuestion('B', 'src1')])!
     expect(r2.session.items.map((it) => `${it.source}/${it.id}`)).toEqual(['src1/A', 'src1/B'])
     expect(r2.idx).toBe(0)
@@ -159,5 +155,49 @@ describe('payloadFor', () => {
   it('keeps unparseable dates as-is (legacy stored formats)', () => {
     expect(payloadFor({ ...s, date: '2026/9/4' }, 'workbook', opts).date).toBe('2026/9/4')
     expect(payloadFor({ ...s, date: '某天' }, 'workbook', opts).date).toBe('某天')
+  })
+})
+
+describe('splitBooksBySubject', () => {
+  const mk = (id: string, itemSubjects: (string | undefined)[]): import('./types').BookDef => ({
+    id,
+    name: id,
+    seed: 's',
+    date: '2026-09-13',
+    createdAt: 0,
+    items: itemSubjects.map((_, i) => ({ id: `${id}-${i}`, source: 's1', optionOrder: null })),
+  })
+
+  it('单科进 main、多科进 mixed、无匹配与全部失效的题本隐藏', () => {
+    const math = mk('math', ['数学', '数学'])
+    const mix = mk('mix', ['数学', '自控'])
+    const auto = mk('auto', ['自控', '自控'])
+    const gone = mk('gone', [undefined, undefined])
+    const subjectOf = (it: import('./types').BookItemDef): string | undefined => {
+      const m: Record<string, string | undefined> = {
+        'math-0': '数学', 'math-1': '数学',
+        'mix-0': '数学', 'mix-1': '自控',
+        'auto-0': '自控', 'auto-1': '自控',
+        'gone-0': undefined, 'gone-1': undefined,
+      }
+      return m[it.id]
+    }
+    const res = splitBooksBySubject([math, mix, auto, gone], '自控', subjectOf)
+    expect(res.main.map((b) => b.id)).toEqual(['auto'])
+    expect(res.mixed.map((b) => b.id)).toEqual(['mix'])
+
+    const resMath = splitBooksBySubject([math, mix, auto, gone], '数学', subjectOf)
+    expect(resMath.main.map((b) => b.id)).toEqual(['math'])
+    expect(resMath.mixed.map((b) => b.id)).toEqual(['mix'])
+
+    const unknownSub = mk('unk', ['', ''])
+    const r3 = splitBooksBySubject([unknownSub], '未知', (it) => (it.id.startsWith('unk') ? '未知' : undefined))
+    expect(r3.main.map((b) => b.id)).toEqual(['unk'])
+
+    const r4 = splitBooksBySubject([gone], '自控', () => undefined)
+    expect(r4.main).toHaveLength(0)
+    expect(r4.mixed).toHaveLength(0)
+
+    expect(splitBooksBySubject([math, gone], '', () => undefined).main).toHaveLength(2)
   })
 })

@@ -17,7 +17,7 @@ export function useMathFit(rootEl: Ref<HTMLElement | null>) {
     mo = new MutationObserver(scheduleFit)
     if (rootEl.value) mo.observe(rootEl.value, { childList: true, subtree: true })
     window.addEventListener('resize', scheduleFit)
-    // fonts.ready may resolve after unmount; the disposed flag drops it
+
     document.fonts?.ready.then(scheduleFit)
   })
   onBeforeUnmount(() => {

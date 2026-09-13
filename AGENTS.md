@@ -37,11 +37,28 @@
   attrs 覆盖不了)。正确做法:内联样式且单位用 **rem**(任意档位,
   如 `style="width: 0.875rem; height: 0.875rem"`),或组件内
   `:style="{ width: size, height: size }"`(size 必须是 rem 值)。
+- **按钮内 lucide 图标的光学对齐与放大是全局统一规则**,集中在
+  style.css 的 `button svg`(inline-block + vertical-align 下沉 +
+  translateY/scale 光学微调)。**禁止在组件里单独调图标的对齐或大小**
+  (图标声明尺寸仍按上一条用内联 rem);若某按钮图标视觉不对,
+  先调全局规则,而不是给单个组件加补丁。
 - 颜色/阴影/圆角/层级/等宽字体优先用 style.css `:root` 里的设计
   token(`--brand-weak`、`--shadow-modal`、`--radius-pill`、`--z-modal`
   等);新弹窗遮罩/外壳复用全局 `.modal-mask` / `.dialog` 类,不要
   手抄配方。
-  
+
+## 移动适配优先
+
+- **本应用移动适配优先**:桌面布局是移动布局的放宽,不是另一套设计。
+  **禁止任何"hover 才显示/才可触达"的按钮或操作**(如悬停浮出的操作
+  图标)——触屏没有 hover,操作入口必须常显;收进常显的 ⋯ 菜单
+  (复用 `MenuPop` + `useAnchoredMenu`)是标准做法。
+- **列表项与按钮的点击目标要足够大**:行高/按钮不小于约 2.25rem,
+  字号不要过小(列表正文 ≥0.875rem);不要为了桌面密度牺牲触控。
+- **大弹窗在窄屏下全屏**:遮罩加 `.modal-mask.fs`、弹窗加
+  `.dialog.fs`(全局样式已定义,html 容器 ≤62.4375rem 时铺满并去
+  圆角);新的大弹窗一律带上。
+
 ## 测试规范
 
 - 所有验证不得污染真实数据:写操作只允许针对临时创建、验证完即删的

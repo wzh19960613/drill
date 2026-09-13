@@ -62,6 +62,7 @@ DRILL_DIST=frontend/dist DRILL_ROOT=/path/to/bank DRILL_DATA=/path/to/data ./dri
 | `DRILL_ROOT` | 仓库根目录       | 题库根；显式设置时，首次启动将其本身注册为默认题源            |
 | `DRILL_DATA` | `backend/data`   | 数据目录：做题记录、题本、题源、熟练标记、导出缓存          |
 | `DRILL_DIST` | `frontend/dist`  | 后端托管的前端静态资源目录                                  |
+| `DRILL_MAX_UPLOAD_MB` | `20`             | 编辑器图片上传上限（MB），1–200                              |
 
 ## PWA
 

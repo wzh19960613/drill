@@ -24,6 +24,7 @@ import BookListCard from '../components/book/BookListCard.vue'
 import BookViewDialog from '../components/book/BookViewDialog.vue'
 import BookHomeDialogs from '../components/book/BookHomeDialogs.vue'
 import NewBookPill from '../components/book/NewBookPill.vue'
+import SourcesDialog from '../components/list/SourcesDialog.vue'
 
 const router = useRouter()
 
@@ -36,8 +37,20 @@ const flash = ref('')
 
 const asking = ref<BookDef | null>(null)
 const confirmDel = ref<BookDef | null>(null)
+const sourcesOpen = ref(false)
 const favs = useFavorites()
 const lib = useBookLibrary({ viewing, flash: (msg: string) => (flash.value = msg) })
+
+
+async function onSourcesChanged() {
+  await loadAll(true)
+  await lib.refresh({ quiet: true })
+}
+
+function cleanStaleViewing() {
+  const def = viewing.value
+  if (def) void lib.removeStale(def)
+}
 
 const flow = useBookStartFlow({
   viewing,
@@ -119,8 +132,8 @@ watch(askUseAsCurrent, async (v) => {
 
 function onKey(e: KeyboardEvent) {
   if (exportSession.value) return
-  if (newOpen.value) return // The generation dialog handles Esc itself
-  if (detailQ.value) return // The detail dialog handles Esc itself in the capture phase
+  if (newOpen.value) return 
+  if (detailQ.value) return 
   if (flow.resumeAsk.value) {
     if (e.code === 'Escape') flow.closeResumeAsk()
     return
@@ -148,6 +161,12 @@ function onKey(e: KeyboardEvent) {
     }
     router.push('/')
   }
+}
+
+
+async function onBlankCreated(b: { id: string; name: string }) {
+  favAsk.value = b
+  await lib.refresh({ quiet: true })
 }
 
 async function acceptFavorite() {
@@ -215,6 +234,7 @@ watch(anyModalOpen, (on) => (on ? lockBodyScroll() : unlockBodyScroll()))
       :def="lib.activeBook.value"
       :resume-active="resumeActive"
       :subjects-line="lib.isComposite.value ? lib.subjectsOf(lib.activeBook.value).join(' · ') : ''"
+      :stale-count="lib.staleCountOf(lib.activeBook.value)"
       @start="(review) => flow.launch(lib.activeBook.value!, review)"
       @view="flow.viewBook(lib.activeBook.value!)"
     />
@@ -230,6 +250,7 @@ watch(anyModalOpen, (on) => (on ? lockBodyScroll() : unlockBodyScroll()))
       :empty-hint="lib.books.value.length ? mainEmptyHint : NO_BOOKS_HINT"
       :show-subjects="lib.isComposite.value"
       :subjects-of="lib.subjectsOf"
+      :stale-count-of="lib.staleCountOf"
       @view="flow.viewBook"
       @delete="(d) => (confirmDel = d)"
     />
@@ -245,6 +266,20 @@ watch(anyModalOpen, (on) => (on ? lockBodyScroll() : unlockBodyScroll()))
       empty-hint=""
       :subject-count-of="lib.subjectCountOf"
       :current-subject="currentSubject"
+      :stale-count-of="lib.staleCountOf"
+      @view="flow.viewBook"
+      @delete="(d) => (confirmDel = d)"
+    />
+
+    <BookListCard
+      v-if="lib.emptyBooks.value.length"
+      :title="'空题本'"
+      :count="lib.emptyBooks.value.length"
+      :books="lib.emptyBooks.value"
+      :active-id="lib.activeId.value"
+      :loading="lib.loading.value"
+      empty-hint=""
+      :show-subjects="false"
       @view="flow.viewBook"
       @delete="(d) => (confirmDel = d)"
     />
@@ -291,6 +326,14 @@ watch(anyModalOpen, (on) => (on ? lockBodyScroll() : unlockBodyScroll()))
       @open-detail="detailQ = $event"
       @rename="lib.commitViewRename"
       @set-favorite="setFavorite"
+      @open-sources="sourcesOpen = true"
+      @clean-stale="cleanStaleViewing"
+    />
+
+    <SourcesDialog
+      v-if="sourcesOpen"
+      @close="sourcesOpen = false"
+      @changed="onSourcesChanged"
     />
 
     <QuestionDetail
@@ -304,7 +347,7 @@ watch(anyModalOpen, (on) => (on ? lockBodyScroll() : unlockBodyScroll()))
       @navigate="detailQ = $event"
     />
 
-    <BookNewDialog v-if="newOpen" @close="newOpen = false" @blank-created="(b) => (favAsk = b)" />
+    <BookNewDialog v-if="newOpen" @close="newOpen = false" @blank-created="onBlankCreated" />
   </div>
 </template>
 

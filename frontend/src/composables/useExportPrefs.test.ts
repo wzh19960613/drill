@@ -52,7 +52,7 @@ describe('loadExportOpts validation', () => {
     const o = loadExportOpts()
     expect(o.marginT).toBe(40)
     expect(o.marginB).toBe(5)
-    expect(o.marginL).toBe(16) // NaN → default
+    expect(o.marginL).toBe(16)
     expect(o.marginR).toBe(20)
   })
 
